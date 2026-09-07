@@ -566,7 +566,8 @@ def generate(
     prompt,
     max_new_tokens=MAX_GENERATION_TOKENS,
     temperature=TEMPERATURE,
-    top_k=TOP_K
+    top_k=TOP_K,
+    stream=True
 ):
 
     tokens = tokenizer.encode(
@@ -582,7 +583,14 @@ def generate(
         device=DEVICE
     )
 
-    for _ in range(max_new_tokens):
+    stop_reason = "max_length"
+
+    if stream:
+        print("TinyGPT: ", end="", flush=True)
+
+    generated_token_ids = []
+
+    for step in range(max_new_tokens):
 
         idx_cond = idx[
             :, -context_size:
@@ -636,19 +644,47 @@ def generate(
                 keepdim=True
             )
 
-        # Stop when the model generates EOS
+        # ========================================================
+        # EOS STOP
+        # ========================================================
+
         if next_token.item() == EOS_TOKEN_ID:
-            print("EOS generated - stopping.")
+            stop_reason = "EOS"
             break
 
+        token_id = next_token.item()
+        generated_token_ids.append(token_id)
+
+        # Stream token live as it is generated
+        if stream:
+            token_text = tokenizer.decode([token_id])
+            print(token_text, end="", flush=True)
+
+        # Add token
         idx = torch.cat(
             [idx, next_token],
             dim=1
         )
 
-    return tokenizer.decode(
-        idx[0].tolist()
-    )
+    # ============================================================
+    # SHOW WHY GENERATION STOPPED (AFTER OUTPUT COMPLETES)
+    # ============================================================
+
+    if stream:
+        print("\n")
+
+    if stop_reason == "EOS":
+        print("Generation stopped: EOS token generated.")
+    else:
+        print(
+            f"Generation stopped: maximum length reached "
+            f"({max_new_tokens} new tokens)."
+        )
+
+    if stream:
+        print()
+
+    return tokenizer.decode(generated_token_ids)
 
 
 # ============================================================
@@ -791,17 +827,19 @@ def answer_question(question):
 
     if is_greeting(q):
 
-        return (
-            "Hi! I'm TinyGPT. "
-            "Ask me something about the story."
+        print(
+            "\nTinyGPT: Hi! I'm TinyGPT. "
+            "Ask me something about the story.\n"
         )
+        return
 
     if is_identity_question(q):
 
-        return (
-            "I'm TinyGPT, a small language model "
-            "trained on this story."
+        print(
+            "\nTinyGPT: I'm TinyGPT, a small language model "
+            "trained on this story.\n"
         )
+        return
 
     results = retrieve_chunks(
         q,
@@ -810,26 +848,14 @@ def answer_question(question):
 
     if not results:
 
-        return (
-            "I couldn't find anything relevant "
-            "in the story."
+        print(
+            "\nTinyGPT: I couldn't find anything relevant "
+            "in the story.\n"
         )
+        return
 
     # --------------------------------------------------------
-    # Try an extractive answer first.
-    # --------------------------------------------------------
-
-    answer = extract_answer(
-        q,
-        results
-    )
-
-    if answer:
-
-        return answer
-
-    # --------------------------------------------------------
-    # Fallback to TinyGPT generation.
+    # TinyGPT generation
     # --------------------------------------------------------
 
     context = "\n\n".join(
@@ -845,31 +871,14 @@ def answer_question(question):
         + "\nAnswer:"
     )
 
-    generated = generate(
+    print()
+    generate(
         prompt,
         max_new_tokens=150,
         temperature=0.7,
-        top_k=30
+        top_k=30,
+        stream=True
     )
-
-    # Remove prompt if tokenizer decoded it.
-    if "Answer:" in generated:
-
-        generated = generated.split(
-            "Answer:",
-            1
-        )[1]
-
-    generated = generated.strip()
-
-    if not generated:
-
-        return (
-            "I couldn't determine the answer "
-            "from the story."
-        )
-
-    return generated
 
 
 # ============================================================
@@ -908,10 +917,9 @@ while True:
 
         break
 
-    answer = answer_question(
+    if not question:
+        continue
+
+    answer_question(
         question
     )
-
-    print()
-    print("TinyGPT:", answer)
-    print()
