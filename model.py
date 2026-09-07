@@ -46,13 +46,13 @@ print("Device:", device)
 
 vocab_size = 50257
 
-context_size = 64
+context_size = 128
 
-embedding_size = 128
+embedding_size = 192
 
-num_heads = 4
+num_heads = 6
 
-num_layers = 2
+num_layers = 3
 
 dropout = 0.0
 
@@ -60,13 +60,13 @@ batch_size = 8
 
 learning_rate = 3e-4
 
-max_steps = 3000
+max_steps = 1000
 
 eval_interval = 100
 
-eval_batches = 10
+eval_batches = 5
 
-generate_tokens = 200
+generate_tokens = 150
 
 
 # ============================================================
@@ -79,29 +79,22 @@ EOS_TOKEN_ID = 50256
 
 
 # ============================================================
-# 4. LOAD STORY
+# 4. LOAD DATASET
 # ============================================================
 
 with open("content.txt", "r", encoding="utf-8") as f:
     text = f.read()
 
-print()
-print("Story characters:", len(text))
-
+words_count = len(text.split())
 
 # Tokenize
 
 tokens = enc.encode(text)
 
-# Add EOS token to explicitly mark the end of the story
+# Add EOS token to explicitly mark the end of the text
 tokens.append(EOS_TOKEN_ID)
 
 tokens = torch.tensor(tokens, dtype=torch.long)
-
-print("Number of tokens:", len(tokens))
-
-print("First 20 tokens:")
-print(tokens[:20])
 
 
 # ============================================================
@@ -114,8 +107,13 @@ train_data = tokens[:split]
 val_data = tokens[split:]
 
 print()
-print("Training tokens:", len(train_data))
-print("Validation tokens:", len(val_data))
+print("=" * 60)
+print("TinyGPT Dataset & Model Overview")
+print("=" * 60)
+print(f"Words:              {words_count:,}")
+print(f"GPT-2 tokens:       {len(tokens):,}")
+print(f"Training tokens:    {len(train_data):,}")
+print(f"Validation tokens:  {len(val_data):,}")
 
 
 # ============================================================
@@ -567,19 +565,8 @@ num_parameters = sum(
     for p in model.parameters()
 )
 
-print()
-print("Model configuration:")
-print("Vocabulary:", vocab_size)
-print("Context:", context_size)
-print("Embedding:", embedding_size)
-print("Heads:", num_heads)
-print("Layers:", num_layers)
-
-print()
-print(
-    "Total parameters:",
-    f"{num_parameters:,}"
-)
+print(f"Parameters:         {num_parameters:,}")
+print("=" * 60)
 
 
 # ============================================================
@@ -635,7 +622,7 @@ def estimate_loss():
 
 
 # ============================================================
-# 15. INITIAL TEST
+# 15. INITIAL TEST & CPU SPEED BENCHMARK
 # ============================================================
 
 x, y = get_batch(train_data)
@@ -646,30 +633,55 @@ logits, loss = model(
 )
 
 print()
-print("Batch input shape:")
-print(x.shape)
+print("Initial test loss:", round(loss.item(), 4))
+print()
+print("Benchmarking CPU speed (20 steps)...")
+
+import time
+import sys
+
+benchmark_steps = 20
+model.train()
+t0 = time.time()
+
+for _ in range(benchmark_steps):
+    xb, yb = get_batch(train_data)
+    _, l = model(xb, yb)
+    optimizer.zero_grad(set_to_none=True)
+    l.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+    optimizer.step()
+
+t1 = time.time()
+elapsed = t1 - t0
+sec_per_100 = (elapsed / benchmark_steps) * 100
+est_total_min = (sec_per_100 * (max_steps / 100)) / 60
 
 print()
-print("Batch target shape:")
-print(y.shape)
+print("=" * 60)
+print("Estimated/benchmark speed:")
+print(f"{sec_per_100:.1f} seconds per 100 steps")
+print(f"Estimated time for {max_steps:,} steps: {est_total_min:.1f} minutes")
+print("=" * 60)
 
-print()
-print("Logits shape:")
-print(logits.shape)
-
-print()
-print("Initial loss:")
-print(loss.item())
+if "--benchmark-only" in sys.argv:
+    print()
+    print("Benchmark complete (--benchmark-only specified). Exiting before full training.")
+    sys.exit(0)
 
 
 # ============================================================
-# 16. TRAINING
+# 16. TRAINING WITH EARLY STOPPING
 # ============================================================
 
 print()
 print("Starting training...")
 print()
 
+best_val_loss = float("inf")
+patience = 3
+patience_counter = 0
+min_delta = 0.01
 
 for step in range(max_steps):
 
@@ -715,7 +727,7 @@ for step in range(max_steps):
 
 
     # --------------------------------------------------------
-    # Print progress
+    # Print progress & Early Stopping
     # --------------------------------------------------------
 
     if step % eval_interval == 0:
@@ -727,6 +739,16 @@ for step in range(max_steps):
             f"Train Loss: {losses['train']:.4f} | "
             f"Val Loss: {losses['val']:.4f}"
         )
+
+        if losses["val"] < best_val_loss - min_delta:
+            best_val_loss = losses["val"]
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print()
+                print(f"Early stopping triggered at step {step} (val loss stopped improving).")
+                break
 
 
 # ============================================================
