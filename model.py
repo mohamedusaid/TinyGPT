@@ -25,6 +25,7 @@ This version is designed for learning and CPU experimentation.
 """
 
 import math
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -79,39 +80,76 @@ EOS_TOKEN_ID = 50256
 
 
 # ============================================================
-# 4. LOAD DATASET
+# 4. LOAD DATASETS & INDEPENDENT TRAIN/VAL SPLIT
 # ============================================================
 
+# 1. General language data
 with open("content.txt", "r", encoding="utf-8") as f:
-    text = f.read()
+    general_text = f.read()
 
-words_count = len(text.split())
+general_words = len(general_text.split())
+general_blocks = [b.strip() for b in general_text.split("\n\n") if b.strip()]
 
-# Tokenize
+# 2. Structured Q&A examples
+with open("qa_content.txt", "r", encoding="utf-8") as f:
+    qa_text = f.read()
 
-tokens = enc.encode(text)
+qa_words = len(qa_text.split())
+qa_blocks = [b.strip() for b in qa_text.split("\n\n") if b.strip()]
 
-# Add EOS token to explicitly mark the end of the text
-tokens.append(EOS_TOKEN_ID)
+# Deterministic splitting & shuffling for reproducibility
+rng = random.Random(42)
 
-tokens = torch.tensor(tokens, dtype=torch.long)
+# General text: 90% train, 10% validation
+gen_shuffled = general_blocks[:]
+rng.shuffle(gen_shuffled)
+n_gen_train = int(0.9 * len(gen_shuffled))
+gen_train_blocks = gen_shuffled[:n_gen_train]
+gen_val_blocks = gen_shuffled[n_gen_train:]
+
+# QA examples: ~85% train, 15% validation (unseen questions for val)
+qa_shuffled = qa_blocks[:]
+rng.shuffle(qa_shuffled)
+n_qa_train = int(0.85 * len(qa_shuffled))
+qa_train_blocks = qa_shuffled[:n_qa_train]
+qa_val_blocks = qa_shuffled[n_qa_train:]
+
+# Combine training: 5x QA weighting to balance signal without severe overfitting
+qa_repeat = 5
+train_blocks = gen_train_blocks + (qa_train_blocks * qa_repeat)
+rng.shuffle(train_blocks)
+
+# Combine validation: clean evaluation on unseen general text + unseen questions
+val_blocks = gen_val_blocks + qa_val_blocks
+rng.shuffle(val_blocks)
+
+# Tokenize blocks with EOS appended to each block
+def blocks_to_tokens(blocks):
+    toks = []
+    for block in blocks:
+        toks.extend(enc.encode(block))
+        toks.append(EOS_TOKEN_ID)
+    return toks
+
+train_tokens = blocks_to_tokens(train_blocks)
+val_tokens = blocks_to_tokens(val_blocks)
+
+train_data = torch.tensor(train_tokens, dtype=torch.long)
+val_data = torch.tensor(val_tokens, dtype=torch.long)
 
 
 # ============================================================
-# 5. TRAIN / VALIDATION SPLIT
+# 5. DATASET & MODEL OVERVIEW
 # ============================================================
-
-split = int(0.9 * len(tokens))
-
-train_data = tokens[:split]
-val_data = tokens[split:]
 
 print()
 print("=" * 60)
-print("TinyGPT Dataset & Model Overview")
+print("TinyGPT QA Dataset & Model Overview")
 print("=" * 60)
-print(f"Words:              {words_count:,}")
-print(f"GPT-2 tokens:       {len(tokens):,}")
+print(f"General text:       {general_words:,} words ({len(general_blocks):,} paragraphs)")
+print(f"QA examples:        {len(qa_blocks):,} pairs ({qa_words:,} words)")
+print(f"Train split:        {len(gen_train_blocks):,} general + {len(qa_train_blocks):,} QA (x{qa_repeat}) = {len(train_blocks):,} blocks")
+print(f"Val split:          {len(gen_val_blocks):,} general + {len(qa_val_blocks):,} QA (unseen) = {len(val_blocks):,} blocks")
 print(f"Training tokens:    {len(train_data):,}")
 print(f"Validation tokens:  {len(val_data):,}")
 
@@ -780,7 +818,9 @@ print(
 def generate(
     model,
     prompt,
-    max_new_tokens
+    max_new_tokens,
+    temperature=0.8,
+    top_k=40
 ):
 
     model.eval()
@@ -815,19 +855,40 @@ def generate(
 
         logits = logits[:, -1, :]
 
-        # Convert to probabilities
+        # Temperature scaling
+        if temperature > 0:
+            logits = logits / temperature
 
-        probabilities = F.softmax(
-            logits,
-            dim=-1
-        )
+            # Top-k filtering
+            if top_k is not None and top_k > 0:
+                values, indices = torch.topk(
+                    logits,
+                    min(top_k, logits.size(-1))
+                )
+                filtered = torch.full_like(
+                    logits,
+                    float("-inf")
+                )
+                filtered.scatter_(
+                    1,
+                    indices,
+                    values
+                )
+                logits = filtered
 
-        # Sample
+            probabilities = F.softmax(
+                logits,
+                dim=-1
+            )
 
-        next_token = torch.multinomial(
-            probabilities,
-            num_samples=1
-        )
+            # Sample
+            next_token = torch.multinomial(
+                probabilities,
+                num_samples=1
+            )
+        else:
+            # Greedy
+            next_token = torch.argmax(logits, dim=-1, keepdim=True)
 
         # Stop when the model generates EOS
         if next_token.item() == EOS_TOKEN_ID:
@@ -856,24 +917,30 @@ def generate(
 
 
 # ============================================================
-# 19. GENERATE
+# 19. GENERATE SAMPLES
 # ============================================================
 
 print()
-print("Generated text:")
-print()
+print("=" * 60)
+print("Testing generation after training:")
+print("=" * 60)
 
-prompt = (
+test_prompts = [
+    "Question: Who is Erasmus Thorne?\nAnswer:",
+    "Question: What is Python?\nAnswer:",
+    "Question: What is the name of the village?\nAnswer:",
     "Beneath a bruised and violet sky,"
-)
+]
 
-generated = generate(
-    model,
-    prompt,
-    generate_tokens
-)
-
-print(generated)
+for test_p in test_prompts:
+    print()
+    print(f"--- Prompt: {repr(test_p)} ---")
+    generated = generate(
+        model,
+        test_p,
+        generate_tokens
+    )
+    print(generated)
 
 
 # ============================================================
@@ -891,8 +958,8 @@ torch.save(
             "num_layers": num_layers
         }
     },
-    "tiny_gpt_scaling_up.pt"
+    "tiny_gpt_scaling-up_qa.pt"
 )
 
 print()
-print("Model saved as tiny_gpt_scaling_up.pt")
+print("Model saved as tiny_gpt_scaling-up_qa.pt")
