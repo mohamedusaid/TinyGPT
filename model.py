@@ -5,62 +5,77 @@ import tiktoken
 
 
 # ============================================================
-# 1. Configuration
+# 1. CONFIGURATION
 # ============================================================
 
 vocab_size = 50257
-embedding_size = 64
-context_size = 8
+
+embedding_size = 128
+context_size = 32
 
 num_heads = 4
-head_size = embedding_size // num_heads
+num_layers = 2
 
 batch_size = 16
-learning_rate = 0.001
-training_steps = 2000
+
+learning_rate = 3e-4
+weight_decay = 0.01
+
+training_steps = 3000
+
+eval_interval = 200
+
+generation_length = 300
+
+temperature = 0.8
+top_k = 40
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+print("Device:", device)
 
 
 # ============================================================
-# 2. Load story
+# 2. LOAD STORY
 # ============================================================
 
 with open("content.txt", "r", encoding="utf-8") as f:
-    text = f.read()
+    story = f.read()
 
-print("Story characters:", len(text))
+print("\nStory characters:", len(story))
 
 
 # ============================================================
-# 3. Tokenizer
+# 3. TOKENIZER
 # ============================================================
 
-tokenizer = tiktoken.get_encoding("gpt2")
+encoding = tiktoken.get_encoding("gpt2")
 
-tokens = torch.tensor(
-    tokenizer.encode(text),
-    dtype=torch.long
-)
+tokens = encoding.encode(story)
+
+tokens = torch.tensor(tokens, dtype=torch.long)
 
 print("Number of tokens:", len(tokens))
+
 print("First 20 tokens:")
 print(tokens[:20])
 
 
 # ============================================================
-# 4. Train / validation split
+# 4. TRAIN / VALIDATION SPLIT
 # ============================================================
 
-split = int(len(tokens) * 0.9)
+split_index = int(len(tokens) * 0.9)
 
-train_tokens = tokens[:split]
-val_tokens = tokens[split:]
+train_tokens = tokens[:split_index]
+val_tokens = tokens[split_index:]
 
 print("\nTraining tokens:", len(train_tokens))
 print("Validation tokens:", len(val_tokens))
 
 
 # ============================================================
-# 5. Create a random batch
+# 5. GET BATCH
 # ============================================================
 
 def get_batch(data):
@@ -82,402 +97,399 @@ def get_batch(data):
         for i in starts
     ])
 
-    return x, y
+    return x.to(device), y.to(device)
 
 
 # ============================================================
-# 6. Model parameters
+# 6. MULTI-HEAD SELF ATTENTION
 # ============================================================
 
-token_embedding = nn.Embedding(
-    vocab_size,
-    embedding_size
-)
+class MultiHeadAttention(nn.Module):
 
-position_embedding = nn.Embedding(
-    context_size,
-    embedding_size
-)
+    def __init__(self):
+        super().__init__()
+
+        head_size = embedding_size // num_heads
+
+        self.qkv = nn.Linear(
+            embedding_size,
+            embedding_size * 3
+        )
+
+        self.projection = nn.Linear(
+            embedding_size,
+            embedding_size
+        )
+
+        self.num_heads = num_heads
+        self.head_size = head_size
+
+        # Causal mask
+        self.register_buffer(
+            "mask",
+            torch.tril(
+                torch.ones(
+                    context_size,
+                    context_size
+                )
+            )
+        )
+
+    def forward(self, x):
+
+        batch, tokens_count, channels = x.shape
+
+        qkv = self.qkv(x)
+
+        q, k, v = qkv.chunk(3, dim=-1)
+
+        # ------------------------------------------------
+        # Reshape into heads
+        # ------------------------------------------------
+
+        q = q.view(
+            batch,
+            tokens_count,
+            self.num_heads,
+            self.head_size
+        )
+
+        k = k.view(
+            batch,
+            tokens_count,
+            self.num_heads,
+            self.head_size
+        )
+
+        v = v.view(
+            batch,
+            tokens_count,
+            self.num_heads,
+            self.head_size
+        )
+
+        # Move heads before sequence dimension
+
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+
+        # ------------------------------------------------
+        # Attention scores
+        # ------------------------------------------------
+
+        scores = q @ k.transpose(-2, -1)
+
+        scores = scores / (self.head_size ** 0.5)
+
+        # ------------------------------------------------
+        # Causal masking
+        # ------------------------------------------------
+
+        scores = scores.masked_fill(
+            self.mask[:tokens_count, :tokens_count] == 0,
+            float("-inf")
+        )
+
+        # ------------------------------------------------
+        # Softmax
+        # ------------------------------------------------
+
+        attention = F.softmax(
+            scores,
+            dim=-1
+        )
+
+        # ------------------------------------------------
+        # Weighted values
+        # ------------------------------------------------
+
+        output = attention @ v
+
+        # ------------------------------------------------
+        # Concatenate heads
+        # ------------------------------------------------
+
+        output = output.transpose(1, 2)
+
+        output = output.contiguous()
+
+        output = output.view(
+            batch,
+            tokens_count,
+            channels
+        )
+
+        # ------------------------------------------------
+        # Output projection
+        # ------------------------------------------------
+
+        output = self.projection(output)
+
+        return output
 
 
 # ============================================================
-# 7. Attention weights
+# 7. FEED FORWARD NETWORK
 # ============================================================
 
-Wq = nn.Parameter(
-    torch.randn(
-        num_heads,
-        embedding_size,
-        head_size
-    ) * 0.02
-)
+class FeedForward(nn.Module):
 
-Wk = nn.Parameter(
-    torch.randn(
-        num_heads,
-        embedding_size,
-        head_size
-    ) * 0.02
-)
+    def __init__(self):
+        super().__init__()
 
-Wv = nn.Parameter(
-    torch.randn(
-        num_heads,
-        embedding_size,
-        head_size
-    ) * 0.02
-)
+        self.network = nn.Sequential(
 
+            nn.Linear(
+                embedding_size,
+                embedding_size * 4
+            ),
 
-# ============================================================
-# 8. Output projection
-# ============================================================
+            nn.GELU(),
 
-Wo = nn.Parameter(
-    torch.randn(
-        embedding_size,
-        embedding_size
-    ) * 0.02
-)
+            nn.Linear(
+                embedding_size * 4,
+                embedding_size
+            )
+        )
+
+    def forward(self, x):
+
+        return self.network(x)
 
 
 # ============================================================
-# 9. LayerNorm
+# 8. TRANSFORMER BLOCK
 # ============================================================
 
-layer_norm = nn.LayerNorm(
-    embedding_size
-)
+class TransformerBlock(nn.Module):
 
-final_layer_norm = nn.LayerNorm(
-    embedding_size
-)
+    def __init__(self):
+        super().__init__()
 
+        self.layer_norm_1 = nn.LayerNorm(
+            embedding_size
+        )
 
-# ============================================================
-# 10. Feed-Forward Network
-# ============================================================
+        self.attention = MultiHeadAttention()
 
-ffn = nn.Sequential(
-    nn.Linear(
-        embedding_size,
-        embedding_size * 4
-    ),
+        self.layer_norm_2 = nn.LayerNorm(
+            embedding_size
+        )
 
-    nn.GELU(),
+        self.feed_forward = FeedForward()
 
-    nn.Linear(
-        embedding_size * 4,
-        embedding_size
-    )
-)
+    def forward(self, x):
 
+        # Attention residual
 
-# ============================================================
-# 11. Language model head
-# ============================================================
+        x = x + self.attention(
+            self.layer_norm_1(x)
+        )
 
-lm_head = nn.Linear(
-    embedding_size,
-    vocab_size,
-    bias=False
-)
+        # Feed-forward residual
+
+        x = x + self.feed_forward(
+            self.layer_norm_2(x)
+        )
+
+        return x
 
 
 # ============================================================
-# 12. Collect parameters
+# 9. TINY GPT MODEL
 # ============================================================
 
-parameters = [
+class TinyGPT(nn.Module):
 
-    token_embedding.weight,
+    def __init__(self):
 
-    position_embedding.weight,
+        super().__init__()
 
-    Wq,
-    Wk,
-    Wv,
-    Wo,
+        # ------------------------------------------------
+        # Token embeddings
+        # ------------------------------------------------
 
-    layer_norm.weight,
-    layer_norm.bias,
+        self.token_embedding = nn.Embedding(
+            vocab_size,
+            embedding_size
+        )
 
-    final_layer_norm.weight,
-    final_layer_norm.bias,
+        # ------------------------------------------------
+        # Position embeddings
+        # ------------------------------------------------
 
-]
+        self.position_embedding = nn.Embedding(
+            context_size,
+            embedding_size
+        )
 
-parameters += list(ffn.parameters())
-parameters += list(lm_head.parameters())
+        # ------------------------------------------------
+        # Transformer blocks
+        # ------------------------------------------------
+
+        self.blocks = nn.Sequential(
+            *[
+                TransformerBlock()
+                for _ in range(num_layers)
+            ]
+        )
+
+        # ------------------------------------------------
+        # Final normalization
+        # ------------------------------------------------
+
+        self.final_layer_norm = nn.LayerNorm(
+            embedding_size
+        )
+
+        # ------------------------------------------------
+        # Language model head
+        # ------------------------------------------------
+
+        self.lm_head = nn.Linear(
+            embedding_size,
+            vocab_size,
+            bias=False
+        )
+
+        # Weight tying
+        self.lm_head.weight = self.token_embedding.weight
+
+    def forward(self, tokens, targets=None):
+
+        batch, tokens_count = tokens.shape
+
+        # ------------------------------------------------
+        # Token embeddings
+        # ------------------------------------------------
+
+        token_vectors = self.token_embedding(tokens)
+
+        # ------------------------------------------------
+        # Position embeddings
+        # ------------------------------------------------
+
+        positions = torch.arange(
+            tokens_count,
+            device=tokens.device
+        )
+
+        position_vectors = self.position_embedding(
+            positions
+        )
+
+        # ------------------------------------------------
+        # Combine
+        # ------------------------------------------------
+
+        x = token_vectors + position_vectors
+
+        # ------------------------------------------------
+        # Transformer
+        # ------------------------------------------------
+
+        x = self.blocks(x)
+
+        # ------------------------------------------------
+        # Final LayerNorm
+        # ------------------------------------------------
+
+        x = self.final_layer_norm(x)
+
+        # ------------------------------------------------
+        # Vocabulary logits
+        # ------------------------------------------------
+
+        logits = self.lm_head(x)
+
+        # ------------------------------------------------
+        # Loss
+        # ------------------------------------------------
+
+        loss = None
+
+        if targets is not None:
+
+            loss = F.cross_entropy(
+                logits.view(-1, vocab_size),
+                targets.view(-1)
+            )
+
+        return logits, loss
 
 
-print("\nNumber of parameter tensors:", len(parameters))
+# ============================================================
+# 10. CREATE MODEL
+# ============================================================
+
+model = TinyGPT().to(device)
+
+print("\nNumber of parameter tensors:", len(
+    list(model.parameters())
+))
 
 total_parameters = sum(
     p.numel()
-    for p in parameters
+    for p in model.parameters()
 )
 
-print(
-    "Total parameters:",
-    total_parameters
-)
+print("Total parameters:", total_parameters)
 
 
 # ============================================================
-# 13. Optimizer
+# 11. OPTIMIZER
 # ============================================================
 
 optimizer = torch.optim.AdamW(
-    parameters,
-    lr=learning_rate
+    model.parameters(),
+    lr=learning_rate,
+    weight_decay=weight_decay
 )
 
 
 # ============================================================
-# 14. Forward pass
+# 12. EVALUATION
 # ============================================================
 
-def forward(x, targets=None):
+@torch.no_grad()
+def evaluate(data):
 
-    # x shape:
-    #
-    # batch_size × context_size
-    #
-    # Example:
-    #
-    # 16 × 8
+    model.eval()
 
-    B, T = x.shape
+    x, y = get_batch(data)
 
-
-    # --------------------------------------------------------
-    # Token embeddings
-    # --------------------------------------------------------
-
-    token_vectors = token_embedding(x)
-
-    # B × T × 64
-
-
-    # --------------------------------------------------------
-    # Position embeddings
-    # --------------------------------------------------------
-
-    positions = torch.arange(
-        T,
-        device=x.device
+    logits, loss = model(
+        x,
+        y
     )
 
-    position_vectors = position_embedding(
-        positions
-    )
+    model.train()
 
-    # T × 64
-
-
-    # --------------------------------------------------------
-    # Combine
-    # --------------------------------------------------------
-
-    X = token_vectors + position_vectors
-
-    # B × T × 64
-
-
-    # --------------------------------------------------------
-    # Q, K, V
-    # --------------------------------------------------------
-
-    Q = torch.einsum(
-        "btd,hdm->bhtm",
-        X,
-        Wq
-    )
-
-    K = torch.einsum(
-        "btd,hdm->bhtm",
-        X,
-        Wk
-    )
-
-    V = torch.einsum(
-        "btd,hdm->bhtm",
-        X,
-        Wv
-    )
-
-    # B × heads × T × head_size
-
-
-    # --------------------------------------------------------
-    # Attention scores
-    # --------------------------------------------------------
-
-    scores = Q @ K.transpose(
-        -2,
-        -1
-    )
-
-    # B × heads × T × T
-
-
-    # --------------------------------------------------------
-    # Scale
-    # --------------------------------------------------------
-
-    scores = scores / (
-        head_size ** 0.5
-    )
-
-
-    # --------------------------------------------------------
-    # Causal mask
-    # --------------------------------------------------------
-
-    mask = torch.tril(
-        torch.ones(
-            T,
-            T,
-            device=x.device
-        )
-    )
-
-    scores = scores.masked_fill(
-        mask == 0,
-        float("-inf")
-    )
-
-
-    # --------------------------------------------------------
-    # Softmax
-    # --------------------------------------------------------
-
-    attention_weights = torch.softmax(
-        scores,
-        dim=-1
-    )
-
-
-    # --------------------------------------------------------
-    # Attention output
-    # --------------------------------------------------------
-
-    head_outputs = attention_weights @ V
-
-    # B × heads × T × head_size
-
-
-    # --------------------------------------------------------
-    # Concatenate heads
-    # --------------------------------------------------------
-
-    output = head_outputs.transpose(
-        1,
-        2
-    ).contiguous()
-
-    # B × T × heads × head_size
-
-
-    output = output.view(
-        B,
-        T,
-        embedding_size
-    )
-
-    # B × T × 64
-
-
-    # --------------------------------------------------------
-    # Output projection
-    # --------------------------------------------------------
-
-    projected_output = output @ Wo
-
-    # B × T × 64
-
-
-    # --------------------------------------------------------
-    # First residual
-    # --------------------------------------------------------
-
-    output = projected_output + X
-
-
-    # --------------------------------------------------------
-    # LayerNorm
-    # --------------------------------------------------------
-
-    output = layer_norm(output)
-
-
-    # --------------------------------------------------------
-    # Feed Forward Network
-    # --------------------------------------------------------
-
-    ffn_output = ffn(output)
-
-
-    # --------------------------------------------------------
-    # Second residual
-    # --------------------------------------------------------
-
-    output = ffn_output + output
-
-
-    # --------------------------------------------------------
-    # Final LayerNorm
-    # --------------------------------------------------------
-
-    output = final_layer_norm(output)
-
-
-    # --------------------------------------------------------
-    # Language model head
-    # --------------------------------------------------------
-
-    logits = lm_head(output)
-
-    # B × T × vocab_size
-
-
-    # --------------------------------------------------------
-    # Loss
-    # --------------------------------------------------------
-
-    loss = None
-
-    if targets is not None:
-
-        loss = F.cross_entropy(
-            logits.view(
-                -1,
-                vocab_size
-            ),
-            targets.view(-1)
-        )
-
-
-    return logits, loss
+    return loss.item()
 
 
 # ============================================================
-# 15. Test one batch before training
+# 13. FIRST BATCH TEST
 # ============================================================
 
 x, y = get_batch(train_tokens)
-
-logits, loss = forward(
-    x,
-    y
-)
 
 print("\nBatch input shape:")
 print(x.shape)
 
 print("\nBatch target shape:")
 print(y.shape)
+
+
+# ============================================================
+# 14. INITIAL LOSS
+# ============================================================
+
+logits, loss = model(
+    x,
+    y
+)
 
 print("\nLogits shape:")
 print(logits.shape)
@@ -487,190 +499,223 @@ print(loss.item())
 
 
 # ============================================================
-# 16. Training loop
+# 15. TRAINING
 # ============================================================
 
 print("\nStarting training...\n")
 
-
 for step in range(training_steps):
 
-    # --------------------------------------------------------
-    # Get batch
-    # --------------------------------------------------------
+    # Get training batch
 
-    x, y = get_batch(
-        train_tokens
-    )
+    x, y = get_batch(train_tokens)
 
+    # Forward pass
 
-    # --------------------------------------------------------
-    # Forward
-    # --------------------------------------------------------
-
-    logits, loss = forward(
+    logits, loss = model(
         x,
         y
     )
 
-
-    # --------------------------------------------------------
     # Clear old gradients
-    # --------------------------------------------------------
 
     optimizer.zero_grad()
 
-
-    # --------------------------------------------------------
     # Backpropagation
-    # --------------------------------------------------------
 
     loss.backward()
 
-
-    # --------------------------------------------------------
     # Update parameters
-    # --------------------------------------------------------
 
     optimizer.step()
 
-
-    # --------------------------------------------------------
     # Print progress
-    # --------------------------------------------------------
 
     if step % 100 == 0:
 
+        validation_loss = evaluate(
+            val_tokens
+        )
+
         print(
             f"Step {step:4d} | "
-            f"Loss: {loss.item():.4f}"
+            f"Train Loss: {loss.item():.4f} | "
+            f"Val Loss: {validation_loss:.4f}"
         )
 
 
 # ============================================================
-# 17. Validation loss
+# 16. FINAL EVALUATION
 # ============================================================
 
-with torch.no_grad():
+final_train_loss = evaluate(
+    train_tokens
+)
 
-    x, y = get_batch(
-        val_tokens
-    )
-
-    _, val_loss = forward(
-        x,
-        y
-    )
-
+final_val_loss = evaluate(
+    val_tokens
+)
 
 print("\nTraining finished.")
 
 print(
-    "Validation loss:",
-    val_loss.item()
+    f"Final training loss: "
+    f"{final_train_loss:.4f}"
+)
+
+print(
+    f"Final validation loss: "
+    f"{final_val_loss:.4f}"
 )
 
 
 # ============================================================
-# 18. Generate text
+# 17. GENERATION FUNCTION
 # ============================================================
 
+@torch.no_grad()
 def generate(
-    start_text,
-    max_new_tokens=100
+    starting_tokens,
+    max_new_tokens,
+    temperature=1.0,
+    top_k=None
 ):
 
-    # --------------------------------------------------------
-    # Convert starting text to tokens
-    # --------------------------------------------------------
+    model.eval()
 
-    tokens = torch.tensor(
-        tokenizer.encode(start_text),
-        dtype=torch.long
-    )
-
+    tokens = starting_tokens.clone().to(device)
 
     for _ in range(max_new_tokens):
 
-        # Keep only recent context
+        # ------------------------------------------------
+        # Keep only context window
+        # ------------------------------------------------
+
         context = tokens[
             -context_size:
         ]
 
-
         # Add batch dimension
 
-        x = context.unsqueeze(0)
+        context = context.unsqueeze(0)
 
+        # ------------------------------------------------
+        # Model prediction
+        # ------------------------------------------------
 
-        # ----------------------------------------------------
-        # Forward
-        # ----------------------------------------------------
+        logits, _ = model(context)
 
-        with torch.no_grad():
-
-            logits, _ = forward(x)
-
-
-        # ----------------------------------------------------
         # Last position
-        # ----------------------------------------------------
 
-        logits = logits[
-            0,
-            -1
-        ]
+        logits = logits[:, -1, :]
 
+        # ------------------------------------------------
+        # Temperature
+        # ------------------------------------------------
 
-        # ----------------------------------------------------
-        # Convert logits to probabilities
-        # ----------------------------------------------------
+        logits = logits / temperature
 
-        probabilities = torch.softmax(
+        # ------------------------------------------------
+        # Top-k sampling
+        # ------------------------------------------------
+
+        if top_k is not None:
+
+            values, indices = torch.topk(
+                logits,
+                top_k
+            )
+
+            filtered_logits = torch.full_like(
+                logits,
+                float("-inf")
+            )
+
+            filtered_logits.scatter_(
+                1,
+                indices,
+                values
+            )
+
+            logits = filtered_logits
+
+        # ------------------------------------------------
+        # Convert to probabilities
+        # ------------------------------------------------
+
+        probabilities = F.softmax(
             logits,
             dim=-1
         )
 
+        # ------------------------------------------------
+        # Sample next token
+        # ------------------------------------------------
 
-        # ----------------------------------------------------
-        # Pick most likely token
-        # ----------------------------------------------------
-
-        next_token = torch.argmax(
-            probabilities
+        next_token = torch.multinomial(
+            probabilities,
+            num_samples=1
         )
 
+        next_token = next_token.squeeze(0)
 
-        # ----------------------------------------------------
-        # Append token
-        # ----------------------------------------------------
+        # ------------------------------------------------
+        # Append
+        # ------------------------------------------------
 
         tokens = torch.cat(
             [
                 tokens,
-                next_token.unsqueeze(0)
+                next_token
             ]
         )
 
+    model.train()
 
-    # --------------------------------------------------------
-    # Convert tokens back to text
-    # --------------------------------------------------------
-
-    return tokenizer.decode(
-        tokens.tolist()
-    )
+    return tokens
 
 
 # ============================================================
-# 19. Test generation
+# 18. GENERATE STORY
 # ============================================================
 
-print("\nGenerated text:\n")
+print("\nGenerating text...\n")
 
-print(
-    generate(
-        "The",
-        max_new_tokens=100
-    )
+# Start with first 8 tokens from the story
+
+starting_tokens = train_tokens[:8]
+
+generated_tokens = generate(
+    starting_tokens,
+    generation_length,
+    temperature=temperature,
+    top_k=top_k
 )
+
+generated_text = encoding.decode(
+    generated_tokens.tolist()
+)
+
+print(generated_text)
+
+
+# ============================================================
+# 19. SAVE MODEL
+# ============================================================
+
+torch.save(
+    {
+        "model_state_dict": model.state_dict(),
+
+        "config": {
+            "vocab_size": vocab_size,
+            "embedding_size": embedding_size,
+            "context_size": context_size,
+            "num_heads": num_heads,
+            "num_layers": num_layers
+        }
+    },
+    "tiny_gpt.pt"
+)
+
+print("\nModel saved as tiny_gpt.pt")
