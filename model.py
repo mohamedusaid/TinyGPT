@@ -9,8 +9,8 @@ Training data:
 
 Architecture:
     context_size = 256
-    embedding_size = 192
-    num_heads = 6
+    embedding_size = 256
+    num_heads = 8
     num_layers = 3
 
 The trained checkpoint is saved as:
@@ -36,7 +36,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 CONTEXT_SIZE = 256
 EMBEDDING_SIZE = 256
-NUM_HEADS = 6
+NUM_HEADS = 8
 NUM_LAYERS = 3
 
 BATCH_SIZE = 16
