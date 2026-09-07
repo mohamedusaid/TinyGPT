@@ -891,8 +891,8 @@ torch.save(
             "num_layers": num_layers
         }
     },
-    "tiny_gpt.pt"
+    "tiny_gpt_scaling_up.pt"
 )
 
 print()
-print("Model saved as tiny_gpt.pt")
+print("Model saved as tiny_gpt_scaling_up.pt")

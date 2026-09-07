@@ -10,7 +10,7 @@ import tiktoken
 # SETTINGS
 # ============================================================
 
-MODEL_FILE = "tiny_gpt.pt"
+MODEL_FILE = "tiny_gpt_scaling_up.pt"
 CONTENT_FILE = "content.txt"
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
