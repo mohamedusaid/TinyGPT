@@ -1,0 +1,77 @@
+Question: What is the name of the village?
+Answer: The village is called Ashenmere.
+
+Question: Who is Erasmus Thorne?
+Answer: Erasmus Thorne is an elderly cartographer who charted forgotten waterways.
+
+Question: What did Erasmus study?
+Answer: Erasmus studied rivers that had been deliberately erased from collective memory.
+
+Question: What are the Forgotten Rivers?
+Answer: The Forgotten Rivers are subterranean waterways that had been erased from maps and memory.
+
+Question: What was inside Erasmus's leather satchel?
+Answer: His satchel contained a trembling brass compass, a magnifying lens made of volcanic glass, and an ancient journal.
+
+Question: Who told Erasmus he was chasing phantoms?
+Answer: Constable Whitmore told Erasmus he was chasing phantoms.
+
+Question: What did Erasmus discover in the archive cellar?
+Answer: Erasmus discovered an ancient vellum scroll depicting a subterranean network of waterways.
+
+Question: What happened when Erasmus completed his map?
+Answer: The ground shuddered and a thin ribbon of crystalline water broke through the village cobblestones.
+
+Question: Who was Marguerite?
+Answer: Marguerite was Erasmus's wife who died eleven winters past.
+
+Question: What did Marguerite believe about love?
+Answer: She believed love was not a destination but a current, always moving and never truly still.
+
+Question: What is computer science?
+Answer: Computer science is the study of computation, information, and automation.
+
+Question: What is an algorithm?
+Answer: An algorithm is a step-by-step sequence of instructions used to solve problems or perform calculations.
+
+Question: What is Python?
+Answer: Python is a high-level, interpreted programming language known for readable syntax.
+
+Question: What is a data structure?
+Answer: A data structure is a specialized format for organizing, processing, and storing data efficiently.
+
+Question: What is calculus?
+Answer: Calculus is the mathematical study of continuous change, encompassing derivatives and integrals.
+
+Question: What is a derivative in calculus?
+Answer: A derivative measures the sensitivity to change of a function value with respect to a change in its argument.
+
+Question: What is linear algebra?
+Answer: Linear algebra is the branch of mathematics concerning vector spaces and linear mappings between them.
+
+Question: What is the Sun?
+Answer: The Sun is the central star of the Solar System, containing 99.86 percent of the system's mass.
+
+Question: What are the four inner terrestrial planets?
+Answer: The four inner terrestrial planets are Mercury, Venus, Earth, and Mars.
+
+Question: What are the outer giant planets?
+Answer: The outer giant planets are Jupiter, Saturn, Uranus, and Neptune.
+
+Question: What is artificial intelligence?
+Answer: Artificial intelligence is the field of computer science dedicated to building machines capable of performing tasks that require human intelligence.
+
+Question: What is machine learning?
+Answer: Machine learning is an AI subfield where computer systems learn and adapt from data without following explicit instructions.
+
+Question: Who are you?
+Answer: I am TinyGPT, a small language model.
+
+Question: What is your name?
+Answer: My name is TinyGPT.
+
+Question: Hello
+Answer: Hello! How can I help you today?
+
+Question: Hi
+Answer: Hi! I'm TinyGPT. Ask me something about the story or science.
