@@ -1,5 +1,21 @@
+"""
+TinyGPT v2 Question Answering
+
+Uses:
+
+    tiny_gpt_qa_v2.pt
+    content.txt
+    qa_content.txt
+
+The QA dataset is used as a lightweight knowledge/retrieval
+layer. TinyGPT is then used for generation.
+"""
+
+import os
 import re
+import sys
 import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,194 +23,453 @@ import tiktoken
 
 
 # ============================================================
-# SETTINGS
+# 1. SETTINGS
 # ============================================================
 
-MODEL_FILE = "tiny_gpt_scaling_up.pt"
-CONTENT_FILE = "content.txt"
+MODEL_FILE = "tiny_gpt_qa_v2.pt"
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+CONTENT_FILE = (
+    "content.txt"
+)
 
-TOP_K_CHUNKS = 3
-MAX_GENERATION_TOKENS = 150
+QA_FILE = (
+    "qa_content.txt"
+)
 
-TEMPERATURE = 0.8
-TOP_K = 40
+CONTEXT_SIZE = 128
 
+MAX_GENERATION_TOKENS = 80
 
-print(f"Device: {DEVICE}")
+TEMPERATURE = 0.65
 
+TOP_K = 30
 
-# ============================================================
-# LOAD TOKENIZER
-# ============================================================
-
-print("Loading tokenizer...")
-
-tokenizer = tiktoken.get_encoding("gpt2")
-
-VOCAB_SIZE = tokenizer.n_vocab
 EOS_TOKEN_ID = 50256
 
-print(f"Tokenizer vocabulary: {VOCAB_SIZE}")
-print(f"EOS Token ID: {EOS_TOKEN_ID}")
+DEVICE = torch.device(
+    "cuda"
+    if torch.cuda.is_available()
+    else "cpu"
+)
+
+
+if hasattr(
+    sys.stdout,
+    "reconfigure"
+):
+
+    sys.stdout.reconfigure(
+        encoding="utf-8",
+        errors="replace"
+    )
 
 
 # ============================================================
-# LOAD STORY
+# 2. STARTUP
 # ============================================================
 
-print("Loading story...")
+print(
+    f"Device: {DEVICE}"
+)
 
-with open(CONTENT_FILE, "r", encoding="utf-8") as f:
-    story = f.read().strip()
-
-print(f"Story characters: {len(story)}")
-
-
-# ============================================================
-# STORY CHUNKING
-# ============================================================
-
-def split_story(text, chunk_words=120, overlap_words=30):
-
-    words = text.split()
-
-    chunks = []
-
-    start = 0
-
-    while start < len(words):
-
-        end = min(start + chunk_words, len(words))
-
-        chunk = " ".join(words[start:end])
-
-        chunks.append(chunk)
-
-        if end == len(words):
-            break
-
-        start = end - overlap_words
-
-    return chunks
-
-
-story_chunks = split_story(story)
-
-print(f"Story chunks: {len(story_chunks)}")
+print(
+    f"Model file: {MODEL_FILE}"
+)
 
 
 # ============================================================
-# SIMPLE TEXT NORMALIZATION
+# 3. TOKENIZER
 # ============================================================
 
-STOPWORDS = {
-    "the", "a", "an", "is", "are", "was", "were",
-    "to", "of", "and", "or", "in", "on", "at",
-    "for", "from", "with", "who", "what", "where",
-    "when", "why", "how", "did", "does", "do",
-    "has", "have", "had", "he", "she", "it",
-    "they", "them", "his", "her", "their",
-    "this", "that", "these", "those",
-    "about", "tell", "me", "please"
+print(
+    "Loading tokenizer..."
+)
+
+tokenizer = tiktoken.get_encoding(
+    "gpt2"
+)
+
+print(
+    f"Tokenizer vocabulary: "
+    f"{tokenizer.n_vocab}"
+)
+
+print(
+    f"EOS Token ID: "
+    f"{EOS_TOKEN_ID}"
+)
+
+
+# ============================================================
+# 4. LOAD QA DATA
+# ============================================================
+
+print(
+    "Loading QA data..."
+)
+
+if not os.path.exists(QA_FILE):
+
+    raise FileNotFoundError(
+        f"Missing {QA_FILE}"
+    )
+
+
+with open(
+    QA_FILE,
+    "r",
+    encoding="utf-8"
+) as f:
+
+    qa_text = f.read()
+
+
+qa_blocks = [
+    block.strip()
+    for block in qa_text.split(
+        "\n\n"
+    )
+    if block.strip()
+]
+
+
+# ============================================================
+# 5. PARSE QA PAIRS
+# ============================================================
+
+qa_pairs = []
+
+
+for block in qa_blocks:
+
+    question_match = re.search(
+        r"Question:\s*(.*?)\s*Answer:",
+        block,
+        re.IGNORECASE |
+        re.DOTALL
+    )
+
+    answer_match = re.search(
+        r"Answer:\s*(.*?)(?:<\|endoftext\|>|$)",
+        block,
+        re.IGNORECASE |
+        re.DOTALL
+    )
+
+    if (
+        question_match
+        and answer_match
+    ):
+
+        question = (
+            question_match
+            .group(1)
+            .strip()
+        )
+
+        answer = (
+            answer_match
+            .group(1)
+            .strip()
+        )
+
+        if question and answer:
+
+            qa_pairs.append(
+                {
+                    "question": question,
+                    "answer": answer
+                }
+            )
+
+
+print(
+    f"QA pairs loaded: "
+    f"{len(qa_pairs):,}"
+)
+
+
+# ============================================================
+# 6. TEXT NORMALIZATION
+# ============================================================
+
+def normalize(text):
+
+    text = text.lower()
+
+    text = re.sub(
+        r"[^a-z0-9\s]",
+        " ",
+        text
+    )
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text
+    )
+
+    return text.strip()
+
+
+STOP_WORDS = {
+    "what",
+    "is",
+    "the",
+    "a",
+    "an",
+    "of",
+    "to",
+    "in",
+    "on",
+    "for",
+    "and",
+    "or",
+    "was",
+    "were",
+    "are",
+    "who",
+    "where",
+    "when",
+    "how",
+    "did",
+    "do",
+    "does",
+    "can",
+    "could",
+    "would",
+    "tell",
+    "me",
+    "about",
+    "your",
+    "you"
 }
 
 
-def normalize_words(text):
+def useful_words(text):
 
-    words = re.findall(r"[a-zA-Z0-9']+", text.lower())
+    words = normalize(text).split()
 
-    return [
-        w for w in words
-        if w not in STOPWORDS and len(w) > 1
-    ]
-
-
-# ============================================================
-# PREPARE CHUNK WORDS
-# ============================================================
-
-chunk_words = []
-
-for chunk in story_chunks:
-    chunk_words.append(set(normalize_words(chunk)))
+    return {
+        word
+        for word in words
+        if word not in STOP_WORDS
+        and len(word) > 1
+    }
 
 
 # ============================================================
-# RETRIEVAL
+# 7. QA RETRIEVAL
 # ============================================================
 
-def retrieve_chunks(question, top_k=TOP_K_CHUNKS):
+def retrieve_qa(
+    question,
+    min_score=0.30
+):
 
-    query_words = set(normalize_words(question))
+    query_words = useful_words(
+        question
+    )
 
     if not query_words:
+
         return []
+
 
     scored = []
 
-    for i, words in enumerate(chunk_words):
 
-        overlap = query_words.intersection(words)
+    for pair in qa_pairs:
 
-        score = len(overlap)
+        candidate_words = useful_words(
+            pair["question"]
+        )
 
-        # Slight bonus when important question words
-        # occur multiple times in the chunk.
-        raw_lower = story_chunks[i].lower()
+        if not candidate_words:
+            continue
 
-        frequency_bonus = 0
 
-        for word in query_words:
-            count = raw_lower.count(word)
+        intersection = (
+            query_words
+            & candidate_words
+        )
 
-            if count > 1:
-                frequency_bonus += min(count, 3) * 0.1
 
-        score += frequency_bonus
+        union = (
+            query_words
+            | candidate_words
+        )
 
-        scored.append((score, i))
 
-    scored.sort(reverse=True)
+        jaccard = (
+            len(intersection)
+            / max(
+                len(union),
+                1
+            )
+        )
+
+
+        overlap = (
+            len(intersection)
+            / max(
+                len(query_words),
+                1
+            )
+        )
+
+
+        score = (
+            0.45 * jaccard
+            + 0.55 * overlap
+        )
+
+
+        # Strong bonus for important exact phrases.
+
+        normalized_query = normalize(
+            question
+        )
+
+        normalized_candidate = normalize(
+            pair["question"]
+        )
+
+
+        if normalized_candidate == normalized_query:
+
+            score += 1.0
+
+
+        if (
+            normalized_query
+            in normalized_candidate
+            or normalized_candidate
+            in normalized_query
+        ):
+
+            score += 0.35
+
+
+        scored.append(
+            (
+                score,
+                pair
+            )
+        )
+
+
+    scored.sort(
+        key=lambda x: x[0],
+        reverse=True
+    )
+
 
     results = []
 
-    for score, index in scored[:top_k]:
+    for score, pair in scored[:5]:
 
-        if score > 0:
+        if score >= min_score:
 
-            results.append({
-                "score": score,
-                "index": index,
-                "text": story_chunks[index]
-            })
+            results.append(
+                {
+                    "score": score,
+                    "question": pair[
+                        "question"
+                    ],
+                    "answer": pair[
+                        "answer"
+                    ]
+                }
+            )
+
 
     return results
 
 
 # ============================================================
-# MODEL
+# 8. SPECIAL RESPONSES
+# ============================================================
+
+def special_response(
+    question
+):
+
+    q = normalize(
+        question
+    )
+
+
+    greetings = {
+        "hi",
+        "hello",
+        "hey",
+        "hii",
+        "hiii",
+        "good morning",
+        "good evening"
+    }
+
+
+    if q in greetings:
+
+        return (
+            "Hi! I'm TinyGPT. "
+            "Ask me something."
+        )
+
+
+    if (
+        "your name" in q
+        or "who are you" in q
+        or q == "your name"
+    ):
+
+        return (
+            "I'm TinyGPT, "
+            "a small language model."
+        )
+
+
+    if q in {
+        "bye",
+        "goodbye",
+        "see you"
+    }:
+
+        return (
+            "Goodbye!"
+        )
+
+
+    return None
+
+
+# ============================================================
+# 9. MODEL COMPONENTS
 # ============================================================
 
 class CausalSelfAttention(nn.Module):
 
-    def __init__(self, embed_dim, num_heads, context_size):
-
+    def __init__(
+        self,
+        embed_dim,
+        num_heads,
+        context_size
+    ):
         super().__init__()
 
-        assert embed_dim % num_heads == 0
-
         self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
 
-        # IMPORTANT:
-        # checkpoint has qkv WITHOUT bias.
+        self.num_heads = num_heads
+
+        self.head_dim = (
+            embed_dim // num_heads
+        )
+
         self.qkv = nn.Linear(
             embed_dim,
-            3 * embed_dim,
-            bias=False
+            embed_dim * 3
         )
 
         self.proj = nn.Linear(
@@ -202,19 +477,16 @@ class CausalSelfAttention(nn.Module):
             embed_dim
         )
 
-        # IMPORTANT:
-        # checkpoint contains mask with shape [64, 64]
-        mask = torch.tril(
-            torch.ones(
-                context_size,
-                context_size
+        self.register_buffer(
+            "mask",
+            torch.tril(
+                torch.ones(
+                    context_size,
+                    context_size
+                )
             )
         )
 
-        self.register_buffer(
-            "mask",
-            mask
-        )
 
     def forward(self, x):
 
@@ -222,7 +494,10 @@ class CausalSelfAttention(nn.Module):
 
         qkv = self.qkv(x)
 
-        q, k, v = qkv.chunk(3, dim=-1)
+        q, k, v = qkv.chunk(
+            3,
+            dim=-1
+        )
 
         q = q.view(
             B,
@@ -245,64 +520,60 @@ class CausalSelfAttention(nn.Module):
             self.head_dim
         ).transpose(1, 2)
 
+
         scores = (
-            q @ k.transpose(-2, -1)
-        ) / math.sqrt(self.head_dim)
+            q
+            @ k.transpose(-2, -1)
+        ) / math.sqrt(
+            self.head_dim
+        )
+
+
+        mask = (
+            self.mask[
+                :T,
+                :T
+            ]
+            .bool()
+        )
+
 
         scores = scores.masked_fill(
-            self.mask[:T, :T] == 0,
+            ~mask,
             float("-inf")
         )
+
 
         weights = F.softmax(
             scores,
             dim=-1
         )
 
-        output = weights @ v
 
-        output = output.transpose(
-            1, 2
+        out = weights @ v
+
+
+        out = out.transpose(
+            1,
+            2
         ).contiguous()
 
-        output = output.view(
+
+        out = out.view(
             B,
             T,
             C
         )
 
-        output = self.proj(output)
 
-        return output
-
-
-class FeedForward(nn.Module):
-
-    def __init__(self, embed_dim):
-
-        super().__init__()
-
-        hidden_dim = embed_dim * 4
-
-        self.network = nn.Sequential(
-
-            nn.Linear(
-                embed_dim,
-                hidden_dim
-            ),
-
-            nn.GELU(),
-
-            nn.Linear(
-                hidden_dim,
-                embed_dim
-            )
+        return self.proj(
+            out
         )
 
-    def forward(self, x):
 
-        return self.network(x)
-
+# ============================================================
+# 10. TRANSFORMER BLOCK
+# ============================================================
 
 class TransformerBlock(nn.Module):
 
@@ -312,35 +583,56 @@ class TransformerBlock(nn.Module):
         num_heads,
         context_size
     ):
-
         super().__init__()
 
-        self.ln1 = nn.LayerNorm(embed_dim)
-
-        self.attention = CausalSelfAttention(
-            embed_dim,
-            num_heads,
-            context_size
+        self.attention = (
+            CausalSelfAttention(
+                embed_dim,
+                num_heads,
+                context_size
+            )
         )
 
-        self.ln2 = nn.LayerNorm(embed_dim)
-
-        self.ffn = FeedForward(
+        self.norm1 = nn.LayerNorm(
             embed_dim
         )
+
+        self.norm2 = nn.LayerNorm(
+            embed_dim
+        )
+
+        self.feed_forward = nn.Sequential(
+
+            nn.Linear(
+                embed_dim,
+                embed_dim * 4
+            ),
+
+            nn.GELU(),
+
+            nn.Linear(
+                embed_dim * 4,
+                embed_dim
+            )
+        )
+
 
     def forward(self, x):
 
         x = x + self.attention(
-            self.ln1(x)
+            self.norm1(x)
         )
 
-        x = x + self.ffn(
-            self.ln2(x)
+        x = x + self.feed_forward(
+            self.norm2(x)
         )
 
         return x
 
+
+# ============================================================
+# 11. TINYGPT
+# ============================================================
 
 class TinyGPT(nn.Module):
 
@@ -348,81 +640,89 @@ class TinyGPT(nn.Module):
         self,
         vocab_size,
         context_size,
-        embed_dim,
+        embedding_size,
         num_heads,
         num_layers
     ):
-
         super().__init__()
 
-        self.context_size = context_size
-
-        self.token_embedding = nn.Embedding(
-            vocab_size,
-            embed_dim
+        self.context_size = (
+            context_size
         )
 
-        self.position_embedding = nn.Embedding(
-            context_size,
-            embed_dim
-        )
-
-        self.blocks = nn.ModuleList([
-
-            TransformerBlock(
-                embed_dim,
-                num_heads,
-                context_size
+        self.token_embedding = (
+            nn.Embedding(
+                vocab_size,
+                embedding_size
             )
-
-            for _ in range(num_layers)
-
-        ])
-
-        self.ln_f = nn.LayerNorm(
-            embed_dim
         )
 
-        # IMPORTANT:
-        # The training model tied lm_head weights
-        # to token_embedding.
+        self.position_embedding = (
+            nn.Embedding(
+                context_size,
+                embedding_size
+            )
+        )
+
+
+        self.blocks = nn.ModuleList(
+            [
+                TransformerBlock(
+                    embedding_size,
+                    num_heads,
+                    context_size
+                )
+                for _ in range(num_layers)
+            ]
+        )
+
+
+        self.final_norm = (
+            nn.LayerNorm(
+                embedding_size
+            )
+        )
+
+
         self.lm_head = nn.Linear(
-            embed_dim,
+            embedding_size,
             vocab_size,
             bias=False
         )
+
 
         self.lm_head.weight = (
             self.token_embedding.weight
         )
 
-    def forward(self, idx):
+
+    def forward(
+        self,
+        idx
+    ):
 
         B, T = idx.shape
-
-        if T > self.context_size:
-            idx = idx[:, -self.context_size:]
-
-            T = self.context_size
 
         positions = torch.arange(
             T,
             device=idx.device
         )
 
-        token_emb = self.token_embedding(idx)
 
-        position_emb = self.position_embedding(
-            positions
+        x = (
+            self.token_embedding(idx)
+            + self.position_embedding(
+                positions
+            )
         )
 
-        x = token_emb + position_emb
 
         for block in self.blocks:
 
             x = block(x)
 
-        x = self.ln_f(x)
+
+        x = self.final_norm(x)
 
         logits = self.lm_head(x)
 
@@ -430,113 +730,95 @@ class TinyGPT(nn.Module):
 
 
 # ============================================================
-# LOAD CHECKPOINT
+# 12. LOAD CHECKPOINT
 # ============================================================
 
-print("Loading model...")
+print()
+print(
+    "Loading model..."
+)
+
+
+if not os.path.exists(
+    MODEL_FILE
+):
+
+    raise FileNotFoundError(
+        f"Could not find {MODEL_FILE}."
+    )
+
 
 checkpoint = torch.load(
     MODEL_FILE,
     map_location=DEVICE
 )
 
-print("Checkpoint keys:")
 
-for key in checkpoint.keys():
-    print(f"  {key}")
+config = checkpoint[
+    "config"
+]
 
-
-config = checkpoint["config"]
 
 print()
-print("Model configuration:")
-
-for key, value in config.items():
-    print(f"  {key}: {value}")
-
-
-# ------------------------------------------------------------
-# Support both names used in previous model.py versions
-# ------------------------------------------------------------
-
-vocab_size = config.get(
-    "vocab_size",
-    VOCAB_SIZE
+print(
+    "Model configuration:"
 )
 
-context_size = config.get(
-    "context_size",
-    config.get("context_length", 64)
+print(
+    f"  vocab_size: "
+    f"{config['vocab_size']}"
 )
 
-embed_dim = config.get(
-    "embedding_size",
-    config.get("embed_dim", 128)
+print(
+    f"  context_size: "
+    f"{config['context_size']}"
 )
 
-num_heads = config.get(
-    "num_heads",
-    4
+print(
+    f"  embedding_size: "
+    f"{config['embedding_size']}"
 )
 
-num_layers = config.get(
-    "num_layers",
-    2
+print(
+    f"  num_heads: "
+    f"{config['num_heads']}"
+)
+
+print(
+    f"  num_layers: "
+    f"{config['num_layers']}"
 )
 
 
 model = TinyGPT(
-    vocab_size=vocab_size,
-    context_size=context_size,
-    embed_dim=embed_dim,
-    num_heads=num_heads,
-    num_layers=num_layers
+    vocab_size=config[
+        "vocab_size"
+    ],
+
+    context_size=config[
+        "context_size"
+    ],
+
+    embedding_size=config[
+        "embedding_size"
+    ],
+
+    num_heads=config[
+        "num_heads"
+    ],
+
+    num_layers=config[
+        "num_layers"
+    ]
+).to(DEVICE)
+
+
+model.load_state_dict(
+    checkpoint[
+        "model_state_dict"
+    ]
 )
 
-
-state_dict = checkpoint["model_state_dict"]
-
-
-# ============================================================
-# CLEAN OLD CHECKPOINT DIFFERENCES
-# ============================================================
-
-# Some versions of the model saved attention masks as
-# parameters/buffers. They are deterministic and don't need
-# to be restored from the checkpoint.
-
-state_dict = {
-    key: value
-    for key, value in state_dict.items()
-    if not key.endswith(".attention.mask")
-}
-
-
-missing, unexpected = model.load_state_dict(
-    state_dict,
-    strict=False
-)
-
-
-if missing:
-
-    print()
-    print("Missing keys:")
-
-    for key in missing:
-        print(f"  {key}")
-
-
-if unexpected:
-
-    print()
-    print("Unexpected keys:")
-
-    for key in unexpected:
-        print(f"  {key}")
-
-
-model.to(DEVICE)
 
 model.eval()
 
@@ -549,74 +831,106 @@ parameter_count = sum(
 
 print()
 print(
-    f"Model loaded successfully."
+    "Model loaded successfully."
 )
 
 print(
-    f"Parameters: {parameter_count:,}"
+    f"Parameters: "
+    f"{parameter_count:,}"
 )
 
 
 # ============================================================
-# GENERATION
+# 13. GENERATION
 # ============================================================
 
 @torch.no_grad()
 def generate(
     prompt,
-    max_new_tokens=MAX_GENERATION_TOKENS,
-    temperature=TEMPERATURE,
-    top_k=TOP_K,
-    stream=True
+    max_new_tokens=80,
+    temperature=0.65,
+    top_k=30
 ):
 
-    tokens = tokenizer.encode(
-        prompt
-    )
-
-    if len(tokens) == 0:
-        return ""
-
     idx = torch.tensor(
-        [tokens],
+        [
+            tokenizer.encode(
+                prompt
+            )
+        ],
         dtype=torch.long,
         device=DEVICE
     )
 
-    stop_reason = "max_length"
 
-    if stream:
-        print("TinyGPT: ", end="", flush=True)
+    stop_reason = (
+        "maximum length"
+    )
 
-    generated_token_ids = []
 
-    for step in range(max_new_tokens):
+    for _ in range(
+        max_new_tokens
+    ):
 
-        idx_cond = idx[
-            :, -context_size:
-        ]
+        idx_cond = (
+            idx[
+                :,
+                -CONTEXT_SIZE:
+            ]
+        )
+
 
         logits = model(
             idx_cond
         )
 
-        logits = logits[:, -1, :]
 
-        if temperature > 0:
+        logits = (
+            logits[:, -1, :]
+        )
 
-            logits = logits / temperature
 
-            if top_k is not None:
+        if temperature <= 0:
 
-                values, indices = torch.topk(
+            next_token = (
+                torch.argmax(
                     logits,
-                    min(top_k, logits.size(-1))
+                    dim=-1,
+                    keepdim=True
+                )
+            )
+
+        else:
+
+            logits = (
+                logits
+                / temperature
+            )
+
+
+            if (
+                top_k is not None
+                and top_k > 0
+            ):
+
+                values, indices = (
+                    torch.topk(
+                        logits,
+                        min(
+                            top_k,
+                            logits.size(-1)
+                        )
+                    )
                 )
 
-                filtered = torch.full_like(
-                    logits,
-                    float("-inf")
+
+                filtered = (
+                    torch.full_like(
+                        logits,
+                        float("-inf")
+                    )
                 )
+
 
                 filtered.scatter_(
                     1,
@@ -624,301 +938,293 @@ def generate(
                     values
                 )
 
+
                 logits = filtered
 
-            probs = F.softmax(
-                logits,
-                dim=-1
-            )
 
-            next_token = torch.multinomial(
-                probs,
-                num_samples=1
-            )
-
-        else:
-
-            next_token = torch.argmax(
-                logits,
-                dim=-1,
-                keepdim=True
-            )
-
-        # ========================================================
-        # EOS STOP
-        # ========================================================
-
-        if next_token.item() == EOS_TOKEN_ID:
-            stop_reason = "EOS"
-            break
-
-        token_id = next_token.item()
-        generated_token_ids.append(token_id)
-
-        # Stream token live as it is generated
-        if stream:
-            token_text = tokenizer.decode([token_id])
-            print(token_text, end="", flush=True)
-
-        # Add token
-        idx = torch.cat(
-            [idx, next_token],
-            dim=1
-        )
-
-    # ============================================================
-    # SHOW WHY GENERATION STOPPED (AFTER OUTPUT COMPLETES)
-    # ============================================================
-
-    if stream:
-        print("\n")
-
-    if stop_reason == "EOS":
-        print("Generation stopped: EOS token generated.")
-    else:
-        print(
-            f"Generation stopped: maximum length reached "
-            f"({max_new_tokens} new tokens)."
-        )
-
-    if stream:
-        print()
-
-    return tokenizer.decode(generated_token_ids)
-
-
-# ============================================================
-# SENTENCE EXTRACTION
-# ============================================================
-
-def split_sentences(text):
-
-    sentences = re.split(
-        r"(?<=[.!?])\s+",
-        text
-    )
-
-    return [
-        s.strip()
-        for s in sentences
-        if len(s.strip()) > 0
-    ]
-
-
-def extract_answer(question, chunks):
-
-    if not chunks:
-        return None
-
-    question_words = set(
-        normalize_words(question)
-    )
-
-    candidates = []
-
-    for chunk in chunks:
-
-        sentences = split_sentences(
-            chunk["text"]
-        )
-
-        for sentence in sentences:
-
-            sentence_words = set(
-                normalize_words(sentence)
-            )
-
-            overlap = (
-                question_words
-                & sentence_words
-            )
-
-            if not overlap:
-                continue
-
-            score = len(overlap)
-
-            # Prefer sentences containing likely
-            # entity/name information.
-            capitalized_words = re.findall(
-                r"\b[A-Z][a-z]+\b",
-                sentence
-            )
-
-            score += min(
-                len(capitalized_words) * 0.05,
-                0.5
-            )
-
-            candidates.append(
-                (
-                    score,
-                    sentence
+            probabilities = (
+                F.softmax(
+                    logits,
+                    dim=-1
                 )
             )
 
-    if not candidates:
-        return None
 
-    candidates.sort(
-        key=lambda x: x[0],
-        reverse=True
+            next_token = (
+                torch.multinomial(
+                    probabilities,
+                    1
+                )
+            )
+
+
+        token_id = (
+            next_token.item()
+        )
+
+
+        if token_id == EOS_TOKEN_ID:
+
+            stop_reason = "EOS"
+
+            break
+
+
+        idx = torch.cat(
+            [
+                idx,
+                next_token
+            ],
+            dim=1
+        )
+
+
+    generated = (
+        tokenizer.decode(
+            idx[0].tolist()
+        )
     )
 
-    answer = candidates[0][1]
 
-    return answer
-
-
-# ============================================================
-# QUESTION TYPE
-# ============================================================
-
-def is_greeting(question):
-
-    q = question.lower().strip()
-
-    greetings = {
-        "hi",
-        "hello",
-        "hey",
-        "hi there",
-        "hello there",
-        "hey there",
-        "good morning",
-        "good evening",
-        "good afternoon",
-        "ok",
-        "okay",
-        "thanks",
-        "thank you"
-    }
-
-    return q in greetings
-
-
-def is_identity_question(question):
-
-    q = question.lower()
-
-    phrases = [
-        "who are you",
-        "what are you",
-        "what is your name",
-        "who is this"
-    ]
-
-    return any(
-        phrase in q
-        for phrase in phrases
+    return (
+        generated,
+        stop_reason
     )
 
 
 # ============================================================
-# ANSWER FUNCTION
+# 14. ANSWER QUESTION
 # ============================================================
 
-def answer_question(question):
+def answer_question(
+    question
+):
 
-    q = question.strip()
+    question = question.strip()
 
-    if not q:
-        return "Please ask me a question about the story."
 
-    if is_greeting(q):
+    if not question:
 
-        print(
-            "\nTinyGPT: Hi! I'm TinyGPT. "
-            "Ask me something about the story.\n"
-        )
         return
 
-    if is_identity_question(q):
-
-        print(
-            "\nTinyGPT: I'm TinyGPT, a small language model "
-            "trained on this story.\n"
-        )
-        return
-
-    results = retrieve_chunks(
-        q,
-        TOP_K_CHUNKS
-    )
-
-    if not results:
-
-        print(
-            "\nTinyGPT: I couldn't find anything relevant "
-            "in the story.\n"
-        )
-        return
 
     # --------------------------------------------------------
-    # TinyGPT generation
+    # Special responses
     # --------------------------------------------------------
 
-    context = "\n\n".join(
-        r["text"]
-        for r in results
+    special = special_response(
+        question
     )
 
-    prompt = (
-        "Story:\n"
-        + context
-        + "\n\nQuestion: "
-        + q
-        + "\nAnswer:"
+
+    if special is not None:
+
+        print()
+        print(
+            f"TinyGPT: {special}"
+        )
+
+        return
+
+
+    # --------------------------------------------------------
+    # Retrieve QA knowledge
+    # --------------------------------------------------------
+
+    results = retrieve_qa(
+        question
     )
+
 
     print()
-    generate(
-        prompt,
-        max_new_tokens=150,
-        temperature=0.7,
-        top_k=30,
-        stream=True
+
+
+    if results:
+
+        best = results[0]
+
+        print(
+            "Retrieved knowledge:"
+        )
+
+        print(
+            f"  Match: "
+            f"{best['question']}"
+        )
+
+        print(
+            f"  Score: "
+            f"{best['score']:.3f}"
+        )
+
+
+        # ----------------------------------------------------
+        # IMPORTANT
+        #
+        # For high-confidence QA matches we return the known
+        # answer directly.
+        #
+        # This prevents a tiny 11M parameter model from
+        # corrupting an answer it already has in the dataset.
+        # ----------------------------------------------------
+
+        if best["score"] >= 0.65:
+
+            print()
+
+            print(
+                f"TinyGPT: "
+                f"{best['answer']}"
+            )
+
+            return
+
+
+        # ----------------------------------------------------
+        # Medium-confidence result
+        #
+        # Give the model the retrieved knowledge.
+        # ----------------------------------------------------
+
+        context = best[
+            "answer"
+        ]
+
+
+        prompt = (
+            "Question: "
+            + question
+            + "\n"
+            + "Relevant information: "
+            + context
+            + "\n"
+            + "Answer:"
+        )
+
+
+    else:
+
+        # ----------------------------------------------------
+        # No QA match.
+        #
+        # Let the language model attempt a response.
+        # ----------------------------------------------------
+
+        prompt = (
+            "Question: "
+            + question
+            + "\n"
+            + "Answer:"
+        )
+
+
+    generated, reason = (
+        generate(
+            prompt,
+            max_new_tokens=MAX_GENERATION_TOKENS,
+            temperature=TEMPERATURE,
+            top_k=TOP_K
+        )
     )
 
 
+    # Remove the prompt from output.
+
+    if generated.startswith(
+        prompt
+    ):
+
+        answer = generated[
+            len(prompt):
+        ].strip()
+
+    else:
+
+        answer = generated.strip()
+
+
+    # Remove accidental EOS text.
+
+    answer = answer.replace(
+        "<|endoftext|>",
+        ""
+    ).strip()
+
+
+    print(
+        f"Generation stopped: "
+        f"{reason}"
+    )
+
+
+    if not answer:
+
+        print(
+            "TinyGPT: "
+            "I couldn't generate an answer."
+        )
+
+    else:
+
+        print(
+            f"TinyGPT: {answer}"
+        )
+
+
 # ============================================================
-# INTERACTIVE QA
+# 15. MAIN LOOP
 # ============================================================
 
 print()
 print("=" * 60)
 print("TinyGPT Question Answering")
 print("=" * 60)
+
 print()
-print("Ask a question about the story.")
-print("Type 'exit' to quit.")
-print()
+print(
+    "Ask a question."
+)
+
+print(
+    "Type 'quit' or 'exit' to stop."
+)
 
 
 while True:
 
     try:
 
-        question = input("You: ").strip()
+        question = input(
+            "\nYou: "
+        )
 
-    except KeyboardInterrupt:
+    except (
+        EOFError,
+        KeyboardInterrupt
+    ):
 
         print()
-        print("Goodbye!")
+        print(
+            "Goodbye!"
+        )
 
         break
+
+
+    question = question.strip()
+
 
     if question.lower() in {
-        "exit",
-        "quit"
+        "quit",
+        "exit"
     }:
 
-        print("Goodbye!")
+        print(
+            "Goodbye!"
+        )
 
         break
 
-    if not question:
-        continue
 
     answer_question(
         question

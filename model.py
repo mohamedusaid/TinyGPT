@@ -1,31 +1,27 @@
 """
-Efficient Tiny GPT
-------------------
+TinyGPT v2
+-----------
+Small decoder-only Transformer for learning.
 
-Goal:
-    Build a real GPT-style language model that can be trained
-    efficiently on CPU.
+Training data:
+    content.txt
+    qa_content.txt
 
 Architecture:
-    GPT tokenizer
-    -> token embeddings
-    -> positional embeddings
-    -> Transformer blocks
-        -> causal self-attention
-        -> residual connection
-        -> LayerNorm
-        -> feed-forward network
-        -> residual connection
-    -> final LayerNorm
-    -> language-model head
-    -> logits
-    -> cross entropy
+    context_size = 128
+    embedding_size = 192
+    num_heads = 6
+    num_layers = 3
 
-This version is designed for learning and CPU experimentation.
+The trained checkpoint is saved as:
+    tiny_gpt_qa_v2.pt
 """
 
 import math
+import os
 import random
+import time
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -33,285 +29,445 @@ import tiktoken
 
 
 # ============================================================
-# 1. DEVICE
+# 1. SETTINGS
 # ============================================================
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-print("Device:", device)
+CONTEXT_SIZE = 128
+EMBEDDING_SIZE = 192
+NUM_HEADS = 6
+NUM_LAYERS = 3
+
+BATCH_SIZE = 8
+
+LEARNING_RATE = 3e-4
+
+MAX_STEPS = 2000
+
+EVAL_INTERVAL = 100
+EVAL_BATCHES = 5
+
+EARLY_STOPPING_PATIENCE = 4
+
+QA_REPEAT = 3
+
+EOS_TOKEN_ID = 50256
+
+CHECKPOINT_FILE = "tiny_gpt_qa_v2.pt"
+
+GENERAL_FILE = "content.txt"
+QA_FILE = "qa_content.txt"
+
+SEED = 42
+
+random.seed(SEED)
+torch.manual_seed(SEED)
+
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(SEED)
 
 
 # ============================================================
-# 2. CONFIGURATION
+# 2. DEVICE
 # ============================================================
 
-vocab_size = 50257
+print(f"Device: {DEVICE}")
 
-context_size = 128
-
-embedding_size = 192
-
-num_heads = 6
-
-num_layers = 3
-
-dropout = 0.0
-
-batch_size = 8
-
-learning_rate = 3e-4
-
-max_steps = 1000
-
-eval_interval = 100
-
-eval_batches = 5
-
-generate_tokens = 150
+if DEVICE.type == "cuda":
+    print(f"GPU: {torch.cuda.get_device_name(0)}")
+    print(f"CUDA version: {torch.version.cuda}")
 
 
 # ============================================================
 # 3. TOKENIZER
 # ============================================================
 
+print()
+print("Loading tokenizer...")
+
 enc = tiktoken.get_encoding("gpt2")
 
-EOS_TOKEN_ID = 50256
+VOCAB_SIZE = enc.n_vocab
+
+print(f"Tokenizer vocabulary: {VOCAB_SIZE}")
+print(f"EOS Token ID: {EOS_TOKEN_ID}")
 
 
 # ============================================================
-# 4. LOAD DATASETS & INDEPENDENT TRAIN/VAL SPLIT
+# 4. LOAD GENERAL DATA
 # ============================================================
 
-# 1. General language data
-with open("content.txt", "r", encoding="utf-8") as f:
+if not os.path.exists(GENERAL_FILE):
+    raise FileNotFoundError(
+        f"Could not find {GENERAL_FILE}"
+    )
+
+if not os.path.exists(QA_FILE):
+    raise FileNotFoundError(
+        f"Could not find {QA_FILE}"
+    )
+
+print()
+print("Loading datasets...")
+
+with open(
+    GENERAL_FILE,
+    "r",
+    encoding="utf-8"
+) as f:
     general_text = f.read()
 
-general_words = len(general_text.split())
-general_blocks = [b.strip() for b in general_text.split("\n\n") if b.strip()]
 
-# 2. Structured Q&A examples
-with open("qa_content.txt", "r", encoding="utf-8") as f:
+with open(
+    QA_FILE,
+    "r",
+    encoding="utf-8"
+) as f:
     qa_text = f.read()
 
+
+general_words = len(general_text.split())
 qa_words = len(qa_text.split())
-qa_blocks = [b.strip() for b in qa_text.split("\n\n") if b.strip()]
-
-# Deterministic splitting & shuffling for reproducibility
-rng = random.Random(42)
-
-# General text: 90% train, 10% validation
-gen_shuffled = general_blocks[:]
-rng.shuffle(gen_shuffled)
-n_gen_train = int(0.9 * len(gen_shuffled))
-gen_train_blocks = gen_shuffled[:n_gen_train]
-gen_val_blocks = gen_shuffled[n_gen_train:]
-
-# QA examples: ~85% train, 15% validation (unseen questions for val)
-qa_shuffled = qa_blocks[:]
-rng.shuffle(qa_shuffled)
-n_qa_train = int(0.85 * len(qa_shuffled))
-qa_train_blocks = qa_shuffled[:n_qa_train]
-qa_val_blocks = qa_shuffled[n_qa_train:]
-
-# Combine training: 5x QA weighting to balance signal without severe overfitting
-qa_repeat = 5
-train_blocks = gen_train_blocks + (qa_train_blocks * qa_repeat)
-rng.shuffle(train_blocks)
-
-# Combine validation: clean evaluation on unseen general text + unseen questions
-val_blocks = gen_val_blocks + qa_val_blocks
-rng.shuffle(val_blocks)
-
-# Tokenize blocks with EOS appended to each block
-def blocks_to_tokens(blocks):
-    toks = []
-    for block in blocks:
-        toks.extend(enc.encode(block))
-        toks.append(EOS_TOKEN_ID)
-    return toks
-
-train_tokens = blocks_to_tokens(train_blocks)
-val_tokens = blocks_to_tokens(val_blocks)
-
-train_data = torch.tensor(train_tokens, dtype=torch.long)
-val_data = torch.tensor(val_tokens, dtype=torch.long)
 
 
 # ============================================================
-# 5. DATASET & MODEL OVERVIEW
+# 5. SPLIT GENERAL TEXT INTO BLOCKS
 # ============================================================
+
+general_blocks = [
+    block.strip()
+    for block in general_text.split("\n\n")
+    if block.strip()
+]
+
+
+# ============================================================
+# 6. SPLIT QA DATA INTO BLOCKS
+# ============================================================
+
+qa_blocks = [
+    block.strip()
+    for block in qa_text.split("\n\n")
+    if block.strip()
+]
+
 
 print()
 print("=" * 60)
-print("TinyGPT QA Dataset & Model Overview")
+print("TinyGPT v2 Dataset")
 print("=" * 60)
-print(f"General text:       {general_words:,} words ({len(general_blocks):,} paragraphs)")
-print(f"QA examples:        {len(qa_blocks):,} pairs ({qa_words:,} words)")
-print(f"Train split:        {len(gen_train_blocks):,} general + {len(qa_train_blocks):,} QA (x{qa_repeat}) = {len(train_blocks):,} blocks")
-print(f"Val split:          {len(gen_val_blocks):,} general + {len(qa_val_blocks):,} QA (unseen) = {len(val_blocks):,} blocks")
-print(f"Training tokens:    {len(train_data):,}")
-print(f"Validation tokens:  {len(val_data):,}")
+
+print(
+    f"General text: {general_words:,} words"
+)
+
+print(
+    f"General blocks: {len(general_blocks):,}"
+)
+
+print(
+    f"QA examples: {len(qa_blocks):,}"
+)
+
+print(
+    f"QA words: {qa_words:,}"
+)
 
 
 # ============================================================
-# 6. BATCH CREATION
+# 7. TRAIN / VALIDATION SPLIT
+# ============================================================
+
+rng = random.Random(SEED)
+
+
+# General text
+general_shuffled = general_blocks[:]
+rng.shuffle(general_shuffled)
+
+general_train_count = int(
+    len(general_shuffled) * 0.90
+)
+
+general_train_blocks = general_shuffled[
+    :general_train_count
+]
+
+general_val_blocks = general_shuffled[
+    general_train_count:
+]
+
+
+# QA
+qa_shuffled = qa_blocks[:]
+rng.shuffle(qa_shuffled)
+
+qa_train_count = int(
+    len(qa_shuffled) * 0.85
+)
+
+qa_train_blocks = qa_shuffled[
+    :qa_train_count
+]
+
+qa_val_blocks = qa_shuffled[
+    qa_train_count:
+]
+
+
+# ============================================================
+# 8. BUILD TRAINING DATA
+# ============================================================
+
+# Repeat QA examples several times.
+#
+# Why?
+#
+# General text is tens of thousands of words.
+# QA data is much smaller.
+#
+# Repeating QA examples gives the model more exposure
+# to the Question -> Answer pattern.
+
+train_blocks = (
+    general_train_blocks
+    + qa_train_blocks * QA_REPEAT
+)
+
+rng.shuffle(train_blocks)
+
+
+# Validation data is NOT repeated.
+#
+# This is important because we want validation to represent
+# unseen data rather than duplicated training examples.
+
+val_blocks = (
+    general_val_blocks
+    + qa_val_blocks
+)
+
+rng.shuffle(val_blocks)
+
+
+# ============================================================
+# 9. TOKENIZATION
+# ============================================================
+
+def blocks_to_tokens(blocks):
+    """
+    Convert text blocks into token IDs.
+
+    Each block receives an EOS token so the model can learn
+    where one independent piece of text ends.
+    """
+
+    result = []
+
+    for block in blocks:
+
+        tokens = enc.encode(
+            block,
+            allowed_special={
+                "<|endoftext|>"
+            }
+        )
+
+        result.extend(tokens)
+
+        if (
+            len(tokens) == 0
+            or tokens[-1] != EOS_TOKEN_ID
+        ):
+            result.append(EOS_TOKEN_ID)
+
+    return result
+
+
+print()
+print("Tokenizing training data...")
+
+train_tokens = blocks_to_tokens(
+    train_blocks
+)
+
+print("Tokenizing validation data...")
+
+val_tokens = blocks_to_tokens(
+    val_blocks
+)
+
+
+train_data = torch.tensor(
+    train_tokens,
+    dtype=torch.long
+)
+
+val_data = torch.tensor(
+    val_tokens,
+    dtype=torch.long
+)
+
+
+print()
+print("=" * 60)
+
+print(
+    f"Training tokens:   {len(train_data):,}"
+)
+
+print(
+    f"Validation tokens: {len(val_data):,}"
+)
+
+print(
+    f"QA repeat factor:   {QA_REPEAT}x"
+)
+
+print("=" * 60)
+
+
+# ============================================================
+# 10. BATCH CREATION
 # ============================================================
 
 def get_batch(data):
 
-    # Random starting positions
+    if len(data) <= CONTEXT_SIZE:
+        raise ValueError(
+            "Dataset is smaller than CONTEXT_SIZE."
+        )
 
-    ix = torch.randint(
+    starts = torch.randint(
         0,
-        len(data) - context_size - 1,
-        (batch_size,)
+        len(data) - CONTEXT_SIZE - 1,
+        (
+            BATCH_SIZE,
+        )
     )
 
-    x = torch.stack([
-        data[i:i + context_size]
-        for i in ix
-    ])
+    x = torch.stack(
+        [
+            data[i:i + CONTEXT_SIZE]
+            for i in starts
+        ]
+    )
 
-    y = torch.stack([
-        data[i + 1:i + context_size + 1]
-        for i in ix
-    ])
+    y = torch.stack(
+        [
+            data[i + 1:i + CONTEXT_SIZE + 1]
+            for i in starts
+        ]
+    )
 
-    return x.to(device), y.to(device)
+    return (
+        x.to(DEVICE),
+        y.to(DEVICE)
+    )
 
 
 # ============================================================
-# 7. CAUSAL SELF ATTENTION
+# 11. SELF ATTENTION
 # ============================================================
 
 class CausalSelfAttention(nn.Module):
 
-    def __init__(self):
-
+    def __init__(
+        self,
+        embed_dim,
+        num_heads,
+        context_size
+    ):
         super().__init__()
 
-        assert embedding_size % num_heads == 0
+        if embed_dim % num_heads != 0:
+            raise ValueError(
+                "embedding_size must be divisible "
+                "by num_heads"
+            )
 
+        self.embed_dim = embed_dim
         self.num_heads = num_heads
 
-        self.head_size = embedding_size // num_heads
-
-        # One projection produces Q, K and V together.
-        #
-        # This is faster than having three separate operations.
+        self.head_dim = (
+            embed_dim // num_heads
+        )
 
         self.qkv = nn.Linear(
-            embedding_size,
-            embedding_size * 3,
-            bias=False
+            embed_dim,
+            embed_dim * 3
         )
-
-        # Output projection
 
         self.proj = nn.Linear(
-            embedding_size,
-            embedding_size
-        )
-
-        self.dropout = nn.Dropout(dropout)
-
-        # Causal mask
-
-        mask = torch.tril(
-            torch.ones(
-                context_size,
-                context_size
-            )
+            embed_dim,
+            embed_dim
         )
 
         self.register_buffer(
             "mask",
-            mask
+            torch.tril(
+                torch.ones(
+                    context_size,
+                    context_size
+                )
+            )
         )
-
 
     def forward(self, x):
 
         B, T, C = x.shape
 
-        # ----------------------------------------------------
-        # QKV
-        # ----------------------------------------------------
-
         qkv = self.qkv(x)
 
-        q, k, v = qkv.chunk(3, dim=-1)
-
-        # ----------------------------------------------------
-        # Split into heads
-        # ----------------------------------------------------
+        q, k, v = qkv.chunk(
+            3,
+            dim=-1
+        )
 
         q = q.view(
             B,
             T,
             self.num_heads,
-            self.head_size
+            self.head_dim
         ).transpose(1, 2)
 
         k = k.view(
             B,
             T,
             self.num_heads,
-            self.head_size
+            self.head_dim
         ).transpose(1, 2)
 
         v = v.view(
             B,
             T,
             self.num_heads,
-            self.head_size
+            self.head_dim
         ).transpose(1, 2)
-
-        # Shapes:
-
-        # q = B × heads × T × head_size
-        # k = B × heads × T × head_size
-        # v = B × heads × T × head_size
-
-
-        # ----------------------------------------------------
-        # Attention scores
-        # ----------------------------------------------------
 
         scores = (
             q @ k.transpose(-2, -1)
-        ) / math.sqrt(self.head_size)
-
-        # ----------------------------------------------------
-        # Causal mask
-        # ----------------------------------------------------
-
-        scores = scores.masked_fill(
-            self.mask[:T, :T] == 0,
-            float("-inf")
+        ) / math.sqrt(
+            self.head_dim
         )
 
-        # ----------------------------------------------------
-        # Softmax
-        # ----------------------------------------------------
+        causal_mask = (
+            self.mask[:T, :T]
+            .bool()
+        )
+
+        scores = scores.masked_fill(
+            ~causal_mask,
+            float("-inf")
+        )
 
         weights = F.softmax(
             scores,
             dim=-1
         )
 
-        weights = self.dropout(weights)
-
-        # ----------------------------------------------------
-        # Weighted values
-        # ----------------------------------------------------
-
         out = weights @ v
-
-        # ----------------------------------------------------
-        # Merge heads
-        # ----------------------------------------------------
 
         out = out.transpose(
             1,
@@ -324,142 +480,108 @@ class CausalSelfAttention(nn.Module):
             C
         )
 
-        # ----------------------------------------------------
-        # Output projection
-        # ----------------------------------------------------
-
-        out = self.proj(out)
-
-        return out
+        return self.proj(out)
 
 
 # ============================================================
-# 8. FEED FORWARD NETWORK
+# 12. TRANSFORMER BLOCK
 # ============================================================
 
-class FeedForward(nn.Module):
+class TransformerBlock(nn.Module):
 
-    def __init__(self):
-
+    def __init__(
+        self,
+        embed_dim,
+        num_heads,
+        context_size
+    ):
         super().__init__()
 
-        self.network = nn.Sequential(
+        self.attention = (
+            CausalSelfAttention(
+                embed_dim,
+                num_heads,
+                context_size
+            )
+        )
 
+        self.norm1 = nn.LayerNorm(
+            embed_dim
+        )
+
+        self.norm2 = nn.LayerNorm(
+            embed_dim
+        )
+
+        self.feed_forward = nn.Sequential(
             nn.Linear(
-                embedding_size,
-                embedding_size * 4
+                embed_dim,
+                embed_dim * 4
             ),
 
             nn.GELU(),
 
             nn.Linear(
-                embedding_size * 4,
-                embedding_size
-            ),
-
-            nn.Dropout(dropout)
+                embed_dim * 4,
+                embed_dim
+            )
         )
-
 
     def forward(self, x):
-
-        return self.network(x)
-
-
-# ============================================================
-# 9. TRANSFORMER BLOCK
-# ============================================================
-
-class TransformerBlock(nn.Module):
-
-    def __init__(self):
-
-        super().__init__()
-
-        self.ln1 = nn.LayerNorm(
-            embedding_size
-        )
-
-        self.attention = CausalSelfAttention()
-
-        self.ln2 = nn.LayerNorm(
-            embedding_size
-        )
-
-        self.ffn = FeedForward()
-
-
-    def forward(self, x):
-
-        # ----------------------------------------------------
-        # Attention
-        # ----------------------------------------------------
 
         x = x + self.attention(
-            self.ln1(x)
+            self.norm1(x)
         )
 
-        # ----------------------------------------------------
-        # Feed-forward
-        # ----------------------------------------------------
-
-        x = x + self.ffn(
-            self.ln2(x)
+        x = x + self.feed_forward(
+            self.norm2(x)
         )
 
         return x
 
 
 # ============================================================
-# 10. GPT MODEL
+# 13. TINYGPT MODEL
 # ============================================================
 
 class TinyGPT(nn.Module):
 
-    def __init__(self):
-
+    def __init__(
+        self,
+        vocab_size,
+        context_size,
+        embedding_size,
+        num_heads,
+        num_layers
+    ):
         super().__init__()
 
-        # ----------------------------------------------------
-        # Token embedding
-        # ----------------------------------------------------
+        self.context_size = context_size
 
         self.token_embedding = nn.Embedding(
             vocab_size,
             embedding_size
         )
 
-        # ----------------------------------------------------
-        # Position embedding
-        # ----------------------------------------------------
-
         self.position_embedding = nn.Embedding(
             context_size,
             embedding_size
         )
 
-        # ----------------------------------------------------
-        # Transformer blocks
-        # ----------------------------------------------------
-
-        self.blocks = nn.Sequential(
-            *[
-                TransformerBlock()
+        self.blocks = nn.ModuleList(
+            [
+                TransformerBlock(
+                    embedding_size,
+                    num_heads,
+                    context_size
+                )
                 for _ in range(num_layers)
             ]
         )
 
-        # ----------------------------------------------------
-        # Final normalization
-        # ----------------------------------------------------
-
-        self.ln_f = nn.LayerNorm(
+        self.final_norm = nn.LayerNorm(
             embedding_size
         )
-
-        # ----------------------------------------------------
-        # Language model head
-        # ----------------------------------------------------
 
         self.lm_head = nn.Linear(
             embedding_size,
@@ -467,28 +589,19 @@ class TinyGPT(nn.Module):
             bias=False
         )
 
-        # ----------------------------------------------------
-        # Weight tying
-        # ----------------------------------------------------
-        #
-        # The token embedding matrix and LM head share weights.
-        #
-        # This saves a huge number of parameters.
-        #
-
+        # Weight tying.
         self.lm_head.weight = (
             self.token_embedding.weight
         )
 
-        # Initialize weights
-
         self.apply(self._init_weights)
-
 
     def _init_weights(self, module):
 
-        if isinstance(module, nn.Linear):
-
+        if isinstance(
+            module,
+            nn.Linear
+        ):
             nn.init.normal_(
                 module.weight,
                 mean=0.0,
@@ -496,19 +609,19 @@ class TinyGPT(nn.Module):
             )
 
             if module.bias is not None:
-
                 nn.init.zeros_(
                     module.bias
                 )
 
-        elif isinstance(module, nn.Embedding):
-
+        elif isinstance(
+            module,
+            nn.Embedding
+        ):
             nn.init.normal_(
                 module.weight,
                 mean=0.0,
                 std=0.02
             )
-
 
     def forward(
         self,
@@ -518,49 +631,28 @@ class TinyGPT(nn.Module):
 
         B, T = idx.shape
 
-        # ----------------------------------------------------
-        # Token embeddings
-        # ----------------------------------------------------
-
-        token_vectors = self.token_embedding(idx)
-
-        # ----------------------------------------------------
-        # Position embeddings
-        # ----------------------------------------------------
+        if T > self.context_size:
+            raise ValueError(
+                f"Sequence length {T} exceeds "
+                f"context size {self.context_size}"
+            )
 
         positions = torch.arange(
             T,
             device=idx.device
         )
 
-        position_vectors = (
-            self.position_embedding(positions)
-        )
-
-        # ----------------------------------------------------
-        # Combine
-        # ----------------------------------------------------
-
         x = (
-            token_vectors
-            + position_vectors
+            self.token_embedding(idx)
+            + self.position_embedding(
+                positions
+            )
         )
 
-        # ----------------------------------------------------
-        # Transformer
-        # ----------------------------------------------------
+        for block in self.blocks:
+            x = block(x)
 
-        x = self.blocks(x)
-
-        # ----------------------------------------------------
-        # Final LayerNorm
-        # ----------------------------------------------------
-
-        x = self.ln_f(x)
-
-        # ----------------------------------------------------
-        # LM head
-        # ----------------------------------------------------
+        x = self.final_norm(x)
 
         logits = self.lm_head(x)
 
@@ -568,58 +660,80 @@ class TinyGPT(nn.Module):
 
         if targets is not None:
 
-            B, T, C = logits.shape
-
-            logits_flat = logits.view(
-                B * T,
-                C
-            )
-
-            targets_flat = targets.view(
-                B * T
-            )
-
             loss = F.cross_entropy(
-                logits_flat,
-                targets_flat
+                logits.reshape(
+                    -1,
+                    logits.size(-1)
+                ),
+                targets.reshape(-1)
             )
 
         return logits, loss
 
 
 # ============================================================
-# 11. CREATE MODEL
+# 14. CREATE MODEL
 # ============================================================
 
-model = TinyGPT().to(device)
+model = TinyGPT(
+    vocab_size=VOCAB_SIZE,
+    context_size=CONTEXT_SIZE,
+    embedding_size=EMBEDDING_SIZE,
+    num_heads=NUM_HEADS,
+    num_layers=NUM_LAYERS
+).to(DEVICE)
 
 
-# ============================================================
-# 12. PARAMETER COUNT
-# ============================================================
-
-num_parameters = sum(
+parameter_count = sum(
     p.numel()
     for p in model.parameters()
 )
 
-print(f"Parameters:         {num_parameters:,}")
+
+print()
+print("=" * 60)
+print("Model Configuration")
+print("=" * 60)
+
+print(
+    f"Vocabulary:       {VOCAB_SIZE:,}"
+)
+
+print(
+    f"Context size:     {CONTEXT_SIZE}"
+)
+
+print(
+    f"Embedding size:   {EMBEDDING_SIZE}"
+)
+
+print(
+    f"Attention heads:  {NUM_HEADS}"
+)
+
+print(
+    f"Transformer layers: {NUM_LAYERS}"
+)
+
+print(
+    f"Parameters:       {parameter_count:,}"
+)
+
 print("=" * 60)
 
 
 # ============================================================
-# 13. OPTIMIZER
+# 15. OPTIMIZER
 # ============================================================
 
 optimizer = torch.optim.AdamW(
     model.parameters(),
-    lr=learning_rate,
-    weight_decay=0.01
+    lr=LEARNING_RATE
 )
 
 
 # ============================================================
-# 14. EVALUATION
+# 16. EVALUATION
 # ============================================================
 
 @torch.no_grad()
@@ -636,7 +750,7 @@ def estimate_loss():
 
         losses = []
 
-        for _ in range(eval_batches):
+        for _ in range(EVAL_BATCHES):
 
             x, y = get_batch(data)
 
@@ -660,220 +774,287 @@ def estimate_loss():
 
 
 # ============================================================
-# 15. INITIAL TEST & CPU SPEED BENCHMARK
+# 17. SPEED BENCHMARK
 # ============================================================
 
-x, y = get_batch(train_data)
-
-logits, loss = model(
-    x,
-    y
-)
-
 print()
-print("Initial test loss:", round(loss.item(), 4))
-print()
-print("Benchmarking CPU speed (20 steps)...")
-
-import time
-import sys
+print("Benchmarking training speed...")
 
 benchmark_steps = 20
+
 model.train()
-t0 = time.time()
+
+start = time.time()
 
 for _ in range(benchmark_steps):
-    xb, yb = get_batch(train_data)
-    _, l = model(xb, yb)
-    optimizer.zero_grad(set_to_none=True)
-    l.backward()
-    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-    optimizer.step()
 
-t1 = time.time()
-elapsed = t1 - t0
-sec_per_100 = (elapsed / benchmark_steps) * 100
-est_total_min = (sec_per_100 * (max_steps / 100)) / 60
-
-print()
-print("=" * 60)
-print("Estimated/benchmark speed:")
-print(f"{sec_per_100:.1f} seconds per 100 steps")
-print(f"Estimated time for {max_steps:,} steps: {est_total_min:.1f} minutes")
-print("=" * 60)
-
-if "--benchmark-only" in sys.argv:
-    print()
-    print("Benchmark complete (--benchmark-only specified). Exiting before full training.")
-    sys.exit(0)
-
-
-# ============================================================
-# 16. TRAINING WITH EARLY STOPPING
-# ============================================================
-
-print()
-print("Starting training...")
-print()
-
-best_val_loss = float("inf")
-patience = 3
-patience_counter = 0
-min_delta = 0.01
-
-for step in range(max_steps):
-
-    # --------------------------------------------------------
-    # Get batch
-    # --------------------------------------------------------
-
-    x, y = get_batch(train_data)
-
-    # --------------------------------------------------------
-    # Forward
-    # --------------------------------------------------------
-
-    logits, loss = model(
-        x,
-        y
+    x, y = get_batch(
+        train_data
     )
-
-    # --------------------------------------------------------
-    # Backward
-    # --------------------------------------------------------
 
     optimizer.zero_grad(
         set_to_none=True
     )
 
+    _, loss = model(
+        x,
+        y
+    )
+
     loss.backward()
 
-    # --------------------------------------------------------
-    # Gradient clipping
-    # --------------------------------------------------------
+    optimizer.step()
+
+
+elapsed = time.time() - start
+
+seconds_per_100 = (
+    elapsed
+    / benchmark_steps
+    * 100
+)
+
+minutes_for_max = (
+    seconds_per_100
+    * MAX_STEPS
+    / 60
+)
+
+print()
+print("=" * 60)
+
+print(
+    f"Benchmark: {seconds_per_100:.1f} "
+    f"seconds / 100 steps"
+)
+
+print(
+    f"Estimated {MAX_STEPS:,} steps: "
+    f"{minutes_for_max:.1f} minutes"
+)
+
+print("=" * 60)
+
+
+# ============================================================
+# 18. RESET MODEL AFTER BENCHMARK
+# ============================================================
+
+model = TinyGPT(
+    vocab_size=VOCAB_SIZE,
+    context_size=CONTEXT_SIZE,
+    embedding_size=EMBEDDING_SIZE,
+    num_heads=NUM_HEADS,
+    num_layers=NUM_LAYERS
+).to(DEVICE)
+
+optimizer = torch.optim.AdamW(
+    model.parameters(),
+    lr=LEARNING_RATE
+)
+
+
+# ============================================================
+# 19. TRAINING
+# ============================================================
+
+print()
+print("=" * 60)
+print("Starting training...")
+print("=" * 60)
+
+
+best_val_loss = float("inf")
+
+steps_without_improvement = 0
+
+training_start = time.time()
+
+for step in range(MAX_STEPS):
+
+    model.train()
+
+    x, y = get_batch(
+        train_data
+    )
+
+    optimizer.zero_grad(
+        set_to_none=True
+    )
+
+    _, loss = model(
+        x,
+        y
+    )
+
+    loss.backward()
 
     torch.nn.utils.clip_grad_norm_(
         model.parameters(),
         1.0
     )
 
-    # --------------------------------------------------------
-    # Update
-    # --------------------------------------------------------
-
     optimizer.step()
 
 
     # --------------------------------------------------------
-    # Print progress & Early Stopping
+    # Evaluation
     # --------------------------------------------------------
 
-    if step % eval_interval == 0:
+    if (
+        step % EVAL_INTERVAL == 0
+        or step == MAX_STEPS - 1
+    ):
 
         losses = estimate_loss()
 
+        train_loss = losses["train"]
+        val_loss = losses["val"]
+
         print(
             f"Step {step:4d} | "
-            f"Train Loss: {losses['train']:.4f} | "
-            f"Val Loss: {losses['val']:.4f}"
+            f"Train Loss: {train_loss:.4f} | "
+            f"Val Loss: {val_loss:.4f}"
         )
 
-        if losses["val"] < best_val_loss - min_delta:
-            best_val_loss = losses["val"]
-            patience_counter = 0
+
+        # ----------------------------------------------------
+        # Early stopping
+        # ----------------------------------------------------
+
+        if val_loss < best_val_loss:
+
+            best_val_loss = val_loss
+
+            steps_without_improvement = 0
+
         else:
-            patience_counter += 1
-            if patience_counter >= patience:
+
+            steps_without_improvement += 1
+
+            if (
+                steps_without_improvement
+                >= EARLY_STOPPING_PATIENCE
+            ):
+
                 print()
-                print(f"Early stopping triggered at step {step} (val loss stopped improving).")
+                print(
+                    "Early stopping triggered."
+                )
+
+                print(
+                    f"Best validation loss: "
+                    f"{best_val_loss:.4f}"
+                )
+
                 break
 
 
 # ============================================================
-# 17. FINAL EVALUATION
+# 20. FINAL EVALUATION
 # ============================================================
 
-losses = estimate_loss()
+final_losses = estimate_loss()
 
-print()
-print("Training finished.")
-
-print()
-print(
-    "Final Train Loss:",
-    losses["train"]
-)
-
-print(
-    "Final Validation Loss:",
-    losses["val"]
+training_time = (
+    time.time()
+    - training_start
 )
 
 
+print()
+print("=" * 60)
+print("Training finished")
+print("=" * 60)
+
+print(
+    f"Final Train Loss: "
+    f"{final_losses['train']:.4f}"
+)
+
+print(
+    f"Final Validation Loss: "
+    f"{final_losses['val']:.4f}"
+)
+
+print(
+    f"Training time: "
+    f"{training_time / 60:.2f} minutes"
+)
+
+
 # ============================================================
-# 18. TEXT GENERATION
+# 21. GENERATION
 # ============================================================
 
 @torch.no_grad()
 def generate(
     model,
     prompt,
-    max_new_tokens,
+    max_new_tokens=100,
     temperature=0.8,
     top_k=40
 ):
 
     model.eval()
 
-    # Tokenize prompt
-
-    encoded = enc.encode(prompt)
-
     idx = torch.tensor(
-        [encoded],
+        [enc.encode(prompt)],
         dtype=torch.long,
-        device=device
+        device=DEVICE
     )
 
-    # --------------------------------------------------------
-    # Generate one token at a time
-    # --------------------------------------------------------
+    stop_reason = "maximum length"
 
     for _ in range(max_new_tokens):
 
-        # Keep only context window
-
-        idx_cond = idx[:, -context_size:]
-
-        # Forward
+        idx_cond = idx[
+            :,
+            -CONTEXT_SIZE:
+        ]
 
         logits, _ = model(
             idx_cond
         )
 
-        # Last position
-
         logits = logits[:, -1, :]
 
-        # Temperature scaling
-        if temperature > 0:
-            logits = logits / temperature
+        if temperature <= 0:
 
-            # Top-k filtering
-            if top_k is not None and top_k > 0:
+            next_token = torch.argmax(
+                logits,
+                dim=-1,
+                keepdim=True
+            )
+
+        else:
+
+            logits = (
+                logits
+                / temperature
+            )
+
+            if top_k is not None:
+
                 values, indices = torch.topk(
                     logits,
-                    min(top_k, logits.size(-1))
+                    min(
+                        top_k,
+                        logits.size(-1)
+                    )
                 )
+
                 filtered = torch.full_like(
                     logits,
                     float("-inf")
                 )
+
                 filtered.scatter_(
                     1,
                     indices,
                     values
                 )
+
                 logits = filtered
 
             probabilities = F.softmax(
@@ -881,85 +1062,121 @@ def generate(
                 dim=-1
             )
 
-            # Sample
             next_token = torch.multinomial(
                 probabilities,
-                num_samples=1
+                1
             )
-        else:
-            # Greedy
-            next_token = torch.argmax(logits, dim=-1, keepdim=True)
 
-        # Stop when the model generates EOS
-        if next_token.item() == EOS_TOKEN_ID:
-            print("EOS generated - stopping.")
+        token_id = next_token.item()
+
+        if token_id == EOS_TOKEN_ID:
+
+            stop_reason = "EOS"
+
             break
 
-        # Append
-
         idx = torch.cat(
-            (
+            [
                 idx,
                 next_token
-            ),
+            ],
             dim=1
         )
 
-    # Decode
-
-    output = enc.decode(
-        idx[0].tolist()
+    return (
+        enc.decode(
+            idx[0].tolist()
+        ),
+        stop_reason
     )
-
-    model.train()
-
-    return output
 
 
 # ============================================================
-# 19. GENERATE SAMPLES
+# 22. TEST GENERATION
 # ============================================================
 
 print()
 print("=" * 60)
-print("Testing generation after training:")
+print("Testing generation")
 print("=" * 60)
+
 
 test_prompts = [
     "Question: Who is Erasmus Thorne?\nAnswer:",
-    "Question: What is Python?\nAnswer:",
     "Question: What is the name of the village?\nAnswer:",
-    "Beneath a bruised and violet sky,"
+    "Question: Who is Constable Whitmore?\nAnswer:",
+    "Question: What is Python?\nAnswer:",
+    "Question: What is an algorithm?\nAnswer:",
 ]
 
-for test_p in test_prompts:
+
+for prompt in test_prompts:
+
     print()
-    print(f"--- Prompt: {repr(test_p)} ---")
-    generated = generate(
-        model,
-        test_p,
-        generate_tokens
+    print(
+        f"Prompt: {prompt!r}"
     )
-    print(generated)
+
+    generated, reason = generate(
+        model,
+        prompt,
+        max_new_tokens=80,
+        temperature=0.7,
+        top_k=30
+    )
+
+    print(
+        f"Stopped because: {reason}"
+    )
+
+    print(
+        generated
+    )
 
 
 # ============================================================
-# 20. SAVE MODEL
+# 23. SAVE CHECKPOINT
 # ============================================================
+
+checkpoint = {
+    "model_state_dict": model.state_dict(),
+
+    "config": {
+        "vocab_size": VOCAB_SIZE,
+        "context_size": CONTEXT_SIZE,
+        "embedding_size": EMBEDDING_SIZE,
+        "num_heads": NUM_HEADS,
+        "num_layers": NUM_LAYERS
+    },
+
+    "tokenizer": "gpt2",
+
+    "eos_token_id": EOS_TOKEN_ID,
+
+    "training": {
+        "max_steps": MAX_STEPS,
+        "learning_rate": LEARNING_RATE,
+        "batch_size": BATCH_SIZE,
+        "qa_repeat": QA_REPEAT
+    }
+}
+
 
 torch.save(
-    {
-        "model_state_dict": model.state_dict(),
-        "config": {
-            "vocab_size": vocab_size,
-            "context_size": context_size,
-            "embedding_size": embedding_size,
-            "num_heads": num_heads,
-            "num_layers": num_layers
-        }
-    },
-    "tiny_gpt_scaling-up_qa.pt"
+    checkpoint,
+    CHECKPOINT_FILE
 )
 
+
 print()
-print("Model saved as tiny_gpt_scaling-up_qa.pt")
+print("=" * 60)
+
+print(
+    f"Model saved as {CHECKPOINT_FILE}"
+)
+
+print(
+    "Existing .pt files were not modified."
+)
+
+print("=" * 60)
