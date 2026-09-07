@@ -36,7 +36,7 @@ QA_FILE = (
     "qa_content.txt"
 )
 
-CONTEXT_SIZE = 128
+CONTEXT_SIZE = 256
 
 MAX_GENERATION_TOKENS = 80
 

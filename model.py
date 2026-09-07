@@ -8,7 +8,7 @@ Training data:
     qa_content.txt
 
 Architecture:
-    context_size = 128
+    context_size = 256
     embedding_size = 192
     num_heads = 6
     num_layers = 3
@@ -34,21 +34,19 @@ import tiktoken
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-CONTEXT_SIZE = 128
-EMBEDDING_SIZE = 192
+CONTEXT_SIZE = 256
+EMBEDDING_SIZE = 256
 NUM_HEADS = 6
 NUM_LAYERS = 3
 
-BATCH_SIZE = 8
+BATCH_SIZE = 16
 
 LEARNING_RATE = 3e-4
 
-MAX_STEPS = 2000
+MAX_STEPS = 5000
 
-EVAL_INTERVAL = 100
-EVAL_BATCHES = 5
-
-EARLY_STOPPING_PATIENCE = 4
+EVAL_INTERVAL = 250
+EVAL_BATCHES = 10
 
 QA_REPEAT = 3
 
@@ -815,7 +813,7 @@ seconds_per_100 = (
 )
 
 minutes_for_max = (
-    seconds_per_100
+    (seconds_per_100 / 100)
     * MAX_STEPS
     / 60
 )
@@ -865,8 +863,7 @@ print("=" * 60)
 
 
 best_val_loss = float("inf")
-
-steps_without_improvement = 0
+best_model_state = None
 
 training_start = time.time()
 
@@ -917,41 +914,16 @@ for step in range(MAX_STEPS):
             f"Val Loss: {val_loss:.4f}"
         )
 
-
-        # ----------------------------------------------------
-        # Early stopping
-        # ----------------------------------------------------
-
         if val_loss < best_val_loss:
-
             best_val_loss = val_loss
-
-            steps_without_improvement = 0
-
-        else:
-
-            steps_without_improvement += 1
-
-            if (
-                steps_without_improvement
-                >= EARLY_STOPPING_PATIENCE
-            ):
-
-                print()
-                print(
-                    "Early stopping triggered."
-                )
-
-                print(
-                    f"Best validation loss: "
-                    f"{best_val_loss:.4f}"
-                )
-
-                break
+            best_model_state = {
+                k: v.cpu().clone()
+                for k, v in model.state_dict().items()
+            }
 
 
 # ============================================================
-# 20. FINAL EVALUATION
+# 20. FINAL EVALUATION & BEST MODEL RESTORE
 # ============================================================
 
 final_losses = estimate_loss()
@@ -978,9 +950,19 @@ print(
 )
 
 print(
+    f"Best Validation Loss: "
+    f"{best_val_loss:.4f}"
+)
+
+print(
     f"Training time: "
     f"{training_time / 60:.2f} minutes"
 )
+
+if best_model_state is not None:
+    model.load_state_dict({k: v.to(DEVICE) for k, v in best_model_state.items()})
+    print()
+    print("Restored model weights with best validation loss for generation and saving.")
 
 
 # ============================================================
