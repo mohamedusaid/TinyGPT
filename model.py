@@ -28,154 +28,47 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import tiktoken
 
 
 # ============================================================
-# 1. DEVICE
-# ============================================================
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-print("Device:", device)
-
-
-# ============================================================
-# 2. CONFIGURATION
-# ============================================================
-
-vocab_size = 50257
-
-context_size = 64
-
-embedding_size = 128
-
-num_heads = 4
-
-num_layers = 2
-
-dropout = 0.0
-
-batch_size = 8
-
-learning_rate = 3e-4
-
-max_steps = 3000
-
-eval_interval = 100
-
-eval_batches = 10
-
-generate_tokens = 200
-
-
-# ============================================================
-# 3. TOKENIZER
-# ============================================================
-
-enc = tiktoken.get_encoding("gpt2")
-
-EOS_TOKEN_ID = 50256
-
-
-# ============================================================
-# 4. LOAD STORY
-# ============================================================
-
-with open("content.txt", "r", encoding="utf-8") as f:
-    text = f.read()
-
-print()
-print("Story characters:", len(text))
-
-
-# Tokenize
-
-tokens = enc.encode(text)
-
-# Add EOS token to explicitly mark the end of the story
-tokens.append(EOS_TOKEN_ID)
-
-tokens = torch.tensor(tokens, dtype=torch.long)
-
-print("Number of tokens:", len(tokens))
-
-print("First 20 tokens:")
-print(tokens[:20])
-
-
-# ============================================================
-# 5. TRAIN / VALIDATION SPLIT
-# ============================================================
-
-split = int(0.9 * len(tokens))
-
-train_data = tokens[:split]
-val_data = tokens[split:]
-
-print()
-print("Training tokens:", len(train_data))
-print("Validation tokens:", len(val_data))
-
-
-# ============================================================
-# 6. BATCH CREATION
-# ============================================================
-
-def get_batch(data):
-
-    # Random starting positions
-
-    ix = torch.randint(
-        0,
-        len(data) - context_size - 1,
-        (batch_size,)
-    )
-
-    x = torch.stack([
-        data[i:i + context_size]
-        for i in ix
-    ])
-
-    y = torch.stack([
-        data[i + 1:i + context_size + 1]
-        for i in ix
-    ])
-
-    return x.to(device), y.to(device)
-
-
-# ============================================================
-# 7. CAUSAL SELF ATTENTION
+# CAUSAL SELF ATTENTION
 # ============================================================
 
 class CausalSelfAttention(nn.Module):
 
-    def __init__(self):
+    def __init__(
+        self,
+        embed_dim=128,
+        num_heads=4,
+        context_size=64,
+        dropout=0.0
+    ):
 
         super().__init__()
 
-        assert embedding_size % num_heads == 0
+        assert embed_dim % num_heads == 0
+
+        self.embed_dim = embed_dim
 
         self.num_heads = num_heads
 
-        self.head_size = embedding_size // num_heads
+        self.head_size = embed_dim // num_heads
 
         # One projection produces Q, K and V together.
         #
         # This is faster than having three separate operations.
 
         self.qkv = nn.Linear(
-            embedding_size,
-            embedding_size * 3,
+            embed_dim,
+            embed_dim * 3,
             bias=False
         )
 
         # Output projection
 
         self.proj = nn.Linear(
-            embedding_size,
-            embedding_size
+            embed_dim,
+            embed_dim
         )
 
         self.dropout = nn.Dropout(dropout)
@@ -298,27 +191,31 @@ class CausalSelfAttention(nn.Module):
 
 
 # ============================================================
-# 8. FEED FORWARD NETWORK
+# FEED FORWARD NETWORK
 # ============================================================
 
 class FeedForward(nn.Module):
 
-    def __init__(self):
+    def __init__(
+        self,
+        embed_dim=128,
+        dropout=0.0
+    ):
 
         super().__init__()
 
         self.network = nn.Sequential(
 
             nn.Linear(
-                embedding_size,
-                embedding_size * 4
+                embed_dim,
+                embed_dim * 4
             ),
 
             nn.GELU(),
 
             nn.Linear(
-                embedding_size * 4,
-                embedding_size
+                embed_dim * 4,
+                embed_dim
             ),
 
             nn.Dropout(dropout)
@@ -331,26 +228,40 @@ class FeedForward(nn.Module):
 
 
 # ============================================================
-# 9. TRANSFORMER BLOCK
+# TRANSFORMER BLOCK
 # ============================================================
 
 class TransformerBlock(nn.Module):
 
-    def __init__(self):
+    def __init__(
+        self,
+        embed_dim=128,
+        num_heads=4,
+        context_size=64,
+        dropout=0.0
+    ):
 
         super().__init__()
 
         self.ln1 = nn.LayerNorm(
-            embedding_size
+            embed_dim
         )
 
-        self.attention = CausalSelfAttention()
+        self.attention = CausalSelfAttention(
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            context_size=context_size,
+            dropout=dropout
+        )
 
         self.ln2 = nn.LayerNorm(
-            embedding_size
+            embed_dim
         )
 
-        self.ffn = FeedForward()
+        self.ffn = FeedForward(
+            embed_dim=embed_dim,
+            dropout=dropout
+        )
 
 
     def forward(self, x):
@@ -375,14 +286,32 @@ class TransformerBlock(nn.Module):
 
 
 # ============================================================
-# 10. GPT MODEL
+# GPT MODEL
 # ============================================================
 
 class TinyGPT(nn.Module):
 
-    def __init__(self):
+    def __init__(
+        self,
+        vocab_size=50257,
+        context_size=64,
+        embedding_size=128,
+        num_heads=4,
+        num_layers=2,
+        dropout=0.0,
+        embed_dim=None
+    ):
 
         super().__init__()
+
+        if embed_dim is not None:
+            embedding_size = embed_dim
+
+        self.vocab_size = vocab_size
+        self.context_size = context_size
+        self.embedding_size = embedding_size
+        self.num_heads = num_heads
+        self.num_layers = num_layers
 
         # ----------------------------------------------------
         # Token embedding
@@ -406,12 +335,15 @@ class TinyGPT(nn.Module):
         # Transformer blocks
         # ----------------------------------------------------
 
-        self.blocks = nn.Sequential(
-            *[
-                TransformerBlock()
-                for _ in range(num_layers)
-            ]
-        )
+        self.blocks = nn.ModuleList([
+            TransformerBlock(
+                embed_dim=embedding_size,
+                num_heads=num_heads,
+                context_size=context_size,
+                dropout=dropout
+            )
+            for _ in range(num_layers)
+        ])
 
         # ----------------------------------------------------
         # Final normalization
@@ -482,6 +414,11 @@ class TinyGPT(nn.Module):
 
         B, T = idx.shape
 
+        # Clip context window if input exceeds context_size
+        if T > self.context_size:
+            idx = idx[:, -self.context_size:]
+            T = self.context_size
+
         # ----------------------------------------------------
         # Token embeddings
         # ----------------------------------------------------
@@ -514,7 +451,8 @@ class TinyGPT(nn.Module):
         # Transformer
         # ----------------------------------------------------
 
-        x = self.blocks(x)
+        for block in self.blocks:
+            x = block(x)
 
         # ----------------------------------------------------
         # Final LayerNorm
@@ -548,329 +486,38 @@ class TinyGPT(nn.Module):
                 targets_flat
             )
 
-        return logits, loss
+            return logits, loss
+
+        return logits
 
 
 # ============================================================
-# 11. CREATE MODEL
+# ARCHITECTURE SELF-TEST
 # ============================================================
 
-model = TinyGPT().to(device)
+if __name__ == "__main__":
 
+    print("Testing TinyGPT architecture...")
 
-# ============================================================
-# 12. PARAMETER COUNT
-# ============================================================
+    model = TinyGPT()
 
-num_parameters = sum(
-    p.numel()
-    for p in model.parameters()
-)
-
-print()
-print("Model configuration:")
-print("Vocabulary:", vocab_size)
-print("Context:", context_size)
-print("Embedding:", embedding_size)
-print("Heads:", num_heads)
-print("Layers:", num_layers)
-
-print()
-print(
-    "Total parameters:",
-    f"{num_parameters:,}"
-)
-
-
-# ============================================================
-# 13. OPTIMIZER
-# ============================================================
-
-optimizer = torch.optim.AdamW(
-    model.parameters(),
-    lr=learning_rate,
-    weight_decay=0.01
-)
-
-
-# ============================================================
-# 14. EVALUATION
-# ============================================================
-
-@torch.no_grad()
-def estimate_loss():
-
-    model.eval()
-
-    results = {}
-
-    for name, data in [
-        ("train", train_data),
-        ("val", val_data)
-    ]:
-
-        losses = []
-
-        for _ in range(eval_batches):
-
-            x, y = get_batch(data)
-
-            _, loss = model(
-                x,
-                y
-            )
-
-            losses.append(
-                loss.item()
-            )
-
-        results[name] = (
-            sum(losses)
-            / len(losses)
-        )
-
-    model.train()
-
-    return results
-
-
-# ============================================================
-# 15. INITIAL TEST
-# ============================================================
-
-x, y = get_batch(train_data)
-
-logits, loss = model(
-    x,
-    y
-)
-
-print()
-print("Batch input shape:")
-print(x.shape)
-
-print()
-print("Batch target shape:")
-print(y.shape)
-
-print()
-print("Logits shape:")
-print(logits.shape)
-
-print()
-print("Initial loss:")
-print(loss.item())
-
-
-# ============================================================
-# 16. TRAINING
-# ============================================================
-
-print()
-print("Starting training...")
-print()
-
-
-for step in range(max_steps):
-
-    # --------------------------------------------------------
-    # Get batch
-    # --------------------------------------------------------
-
-    x, y = get_batch(train_data)
-
-    # --------------------------------------------------------
-    # Forward
-    # --------------------------------------------------------
-
-    logits, loss = model(
-        x,
-        y
+    num_parameters = sum(
+        p.numel()
+        for p in model.parameters()
     )
 
-    # --------------------------------------------------------
-    # Backward
-    # --------------------------------------------------------
-
-    optimizer.zero_grad(
-        set_to_none=True
+    print(
+        "Total parameters:",
+        f"{num_parameters:,}"
     )
 
-    loss.backward()
+    dummy_input = torch.randint(0, 50257, (2, 32))
+    dummy_targets = torch.randint(0, 50257, (2, 32))
 
-    # --------------------------------------------------------
-    # Gradient clipping
-    # --------------------------------------------------------
+    logits = model(dummy_input)
+    print("Forward (inference) logits shape:", logits.shape)
 
-    torch.nn.utils.clip_grad_norm_(
-        model.parameters(),
-        1.0
-    )
+    logits, loss = model(dummy_input, dummy_targets)
+    print(f"Forward (training) loss: {loss.item():.4f}")
 
-    # --------------------------------------------------------
-    # Update
-    # --------------------------------------------------------
-
-    optimizer.step()
-
-
-    # --------------------------------------------------------
-    # Print progress
-    # --------------------------------------------------------
-
-    if step % eval_interval == 0:
-
-        losses = estimate_loss()
-
-        print(
-            f"Step {step:4d} | "
-            f"Train Loss: {losses['train']:.4f} | "
-            f"Val Loss: {losses['val']:.4f}"
-        )
-
-
-# ============================================================
-# 17. FINAL EVALUATION
-# ============================================================
-
-losses = estimate_loss()
-
-print()
-print("Training finished.")
-
-print()
-print(
-    "Final Train Loss:",
-    losses["train"]
-)
-
-print(
-    "Final Validation Loss:",
-    losses["val"]
-)
-
-
-# ============================================================
-# 18. TEXT GENERATION
-# ============================================================
-
-@torch.no_grad()
-def generate(
-    model,
-    prompt,
-    max_new_tokens
-):
-
-    model.eval()
-
-    # Tokenize prompt
-
-    encoded = enc.encode(prompt)
-
-    idx = torch.tensor(
-        [encoded],
-        dtype=torch.long,
-        device=device
-    )
-
-    # --------------------------------------------------------
-    # Generate one token at a time
-    # --------------------------------------------------------
-
-    for _ in range(max_new_tokens):
-
-        # Keep only context window
-
-        idx_cond = idx[:, -context_size:]
-
-        # Forward
-
-        logits, _ = model(
-            idx_cond
-        )
-
-        # Last position
-
-        logits = logits[:, -1, :]
-
-        # Convert to probabilities
-
-        probabilities = F.softmax(
-            logits,
-            dim=-1
-        )
-
-        # Sample
-
-        next_token = torch.multinomial(
-            probabilities,
-            num_samples=1
-        )
-
-        # Stop when the model generates EOS
-        if next_token.item() == EOS_TOKEN_ID:
-            print("EOS generated - stopping.")
-            break
-
-        # Append
-
-        idx = torch.cat(
-            (
-                idx,
-                next_token
-            ),
-            dim=1
-        )
-
-    # Decode
-
-    output = enc.decode(
-        idx[0].tolist()
-    )
-
-    model.train()
-
-    return output
-
-
-# ============================================================
-# 19. GENERATE
-# ============================================================
-
-print()
-print("Generated text:")
-print()
-
-prompt = (
-    "Beneath a bruised and violet sky,"
-)
-
-generated = generate(
-    model,
-    prompt,
-    generate_tokens
-)
-
-print(generated)
-
-
-# ============================================================
-# 20. SAVE MODEL
-# ============================================================
-
-torch.save(
-    {
-        "model_state_dict": model.state_dict(),
-        "config": {
-            "vocab_size": vocab_size,
-            "context_size": context_size,
-            "embedding_size": embedding_size,
-            "num_heads": num_heads,
-            "num_layers": num_layers
-        }
-    },
-    "tiny_gpt.pt"
-)
-
-print()
-print("Model saved as tiny_gpt.pt")
+    print("Self-test passed!")
