@@ -16,7 +16,7 @@ CONTENT_FILE = "content.txt"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 TOP_K_CHUNKS = 3
-MAX_GENERATION_TOKENS = 80
+MAX_GENERATION_TOKENS = 150
 
 TEMPERATURE = 0.8
 TOP_K = 40
@@ -34,8 +34,10 @@ print("Loading tokenizer...")
 tokenizer = tiktoken.get_encoding("gpt2")
 
 VOCAB_SIZE = tokenizer.n_vocab
+EOS_TOKEN_ID = 50256
 
 print(f"Tokenizer vocabulary: {VOCAB_SIZE}")
+print(f"EOS Token ID: {EOS_TOKEN_ID}")
 
 
 # ============================================================
@@ -592,58 +594,57 @@ def generate(
 
         logits = logits[:, -1, :]
 
-        logits = logits / temperature
+        if temperature > 0:
 
-        if top_k is not None:
+            logits = logits / temperature
 
-            values, indices = torch.topk(
+            if top_k is not None:
+
+                values, indices = torch.topk(
+                    logits,
+                    min(top_k, logits.size(-1))
+                )
+
+                filtered = torch.full_like(
+                    logits,
+                    float("-inf")
+                )
+
+                filtered.scatter_(
+                    1,
+                    indices,
+                    values
+                )
+
+                logits = filtered
+
+            probs = F.softmax(
                 logits,
-                min(top_k, logits.size(-1))
+                dim=-1
             )
 
-            filtered = torch.full_like(
+            next_token = torch.multinomial(
+                probs,
+                num_samples=1
+            )
+
+        else:
+
+            next_token = torch.argmax(
                 logits,
-                float("-inf")
+                dim=-1,
+                keepdim=True
             )
 
-            filtered.scatter_(
-                1,
-                indices,
-                values
-            )
-
-            logits = filtered
-
-        probs = F.softmax(
-            logits,
-            dim=-1
-        )
-
-        next_token = torch.multinomial(
-            probs,
-            num_samples=1
-        )
+        # Stop when the model generates EOS
+        if next_token.item() == EOS_TOKEN_ID:
+            print("EOS generated - stopping.")
+            break
 
         idx = torch.cat(
             [idx, next_token],
             dim=1
         )
-
-        decoded = tokenizer.decode(
-            idx[0].tolist()
-        )
-
-        # Stop at a reasonable sentence ending
-        if len(decoded) > len(prompt) + 30:
-
-            tail = decoded[-30:]
-
-            if (
-                "." in tail
-                or "?" in tail
-                or "!" in tail
-            ):
-                break
 
     return tokenizer.decode(
         idx[0].tolist()
@@ -846,7 +847,7 @@ def answer_question(question):
 
     generated = generate(
         prompt,
-        max_new_tokens=60,
+        max_new_tokens=150,
         temperature=0.7,
         top_k=30
     )

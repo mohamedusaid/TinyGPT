@@ -75,6 +75,8 @@ generate_tokens = 200
 
 enc = tiktoken.get_encoding("gpt2")
 
+EOS_TOKEN_ID = 50256
+
 
 # ============================================================
 # 4. LOAD STORY
@@ -91,6 +93,9 @@ print("Story characters:", len(text))
 
 tokens = enc.encode(text)
 
+# Add EOS token to explicitly mark the end of the story
+tokens.append(EOS_TOKEN_ID)
+
 tokens = torch.tensor(tokens, dtype=torch.long)
 
 print("Number of tokens:", len(tokens))
@@ -106,7 +111,6 @@ print(tokens[:20])
 split = int(0.9 * len(tokens))
 
 train_data = tokens[:split]
-
 val_data = tokens[split:]
 
 print()
@@ -802,6 +806,11 @@ def generate(
             probabilities,
             num_samples=1
         )
+
+        # Stop when the model generates EOS
+        if next_token.item() == EOS_TOKEN_ID:
+            print("EOS generated - stopping.")
+            break
 
         # Append
 
