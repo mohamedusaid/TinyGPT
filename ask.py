@@ -177,7 +177,256 @@ def retrieve_chunks(question, top_k=TOP_K_CHUNKS):
 # MODEL
 # ============================================================
 
-from model import TinyGPT, TransformerBlock, CausalSelfAttention, FeedForward
+class CausalSelfAttention(nn.Module):
+
+    def __init__(self, embed_dim, num_heads, context_size):
+
+        super().__init__()
+
+        assert embed_dim % num_heads == 0
+
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+
+        # IMPORTANT:
+        # checkpoint has qkv WITHOUT bias.
+        self.qkv = nn.Linear(
+            embed_dim,
+            3 * embed_dim,
+            bias=False
+        )
+
+        self.proj = nn.Linear(
+            embed_dim,
+            embed_dim
+        )
+
+        # IMPORTANT:
+        # checkpoint contains mask with shape [64, 64]
+        mask = torch.tril(
+            torch.ones(
+                context_size,
+                context_size
+            )
+        )
+
+        self.register_buffer(
+            "mask",
+            mask
+        )
+
+    def forward(self, x):
+
+        B, T, C = x.shape
+
+        qkv = self.qkv(x)
+
+        q, k, v = qkv.chunk(3, dim=-1)
+
+        q = q.view(
+            B,
+            T,
+            self.num_heads,
+            self.head_dim
+        ).transpose(1, 2)
+
+        k = k.view(
+            B,
+            T,
+            self.num_heads,
+            self.head_dim
+        ).transpose(1, 2)
+
+        v = v.view(
+            B,
+            T,
+            self.num_heads,
+            self.head_dim
+        ).transpose(1, 2)
+
+        scores = (
+            q @ k.transpose(-2, -1)
+        ) / math.sqrt(self.head_dim)
+
+        scores = scores.masked_fill(
+            self.mask[:T, :T] == 0,
+            float("-inf")
+        )
+
+        weights = F.softmax(
+            scores,
+            dim=-1
+        )
+
+        output = weights @ v
+
+        output = output.transpose(
+            1, 2
+        ).contiguous()
+
+        output = output.view(
+            B,
+            T,
+            C
+        )
+
+        output = self.proj(output)
+
+        return output
+
+
+class FeedForward(nn.Module):
+
+    def __init__(self, embed_dim):
+
+        super().__init__()
+
+        hidden_dim = embed_dim * 4
+
+        self.network = nn.Sequential(
+
+            nn.Linear(
+                embed_dim,
+                hidden_dim
+            ),
+
+            nn.GELU(),
+
+            nn.Linear(
+                hidden_dim,
+                embed_dim
+            )
+        )
+
+    def forward(self, x):
+
+        return self.network(x)
+
+
+class TransformerBlock(nn.Module):
+
+    def __init__(
+        self,
+        embed_dim,
+        num_heads,
+        context_size
+    ):
+
+        super().__init__()
+
+        self.ln1 = nn.LayerNorm(embed_dim)
+
+        self.attention = CausalSelfAttention(
+            embed_dim,
+            num_heads,
+            context_size
+        )
+
+        self.ln2 = nn.LayerNorm(embed_dim)
+
+        self.ffn = FeedForward(
+            embed_dim
+        )
+
+    def forward(self, x):
+
+        x = x + self.attention(
+            self.ln1(x)
+        )
+
+        x = x + self.ffn(
+            self.ln2(x)
+        )
+
+        return x
+
+
+class TinyGPT(nn.Module):
+
+    def __init__(
+        self,
+        vocab_size,
+        context_size,
+        embed_dim,
+        num_heads,
+        num_layers
+    ):
+
+        super().__init__()
+
+        self.context_size = context_size
+
+        self.token_embedding = nn.Embedding(
+            vocab_size,
+            embed_dim
+        )
+
+        self.position_embedding = nn.Embedding(
+            context_size,
+            embed_dim
+        )
+
+        self.blocks = nn.ModuleList([
+
+            TransformerBlock(
+                embed_dim,
+                num_heads,
+                context_size
+            )
+
+            for _ in range(num_layers)
+
+        ])
+
+        self.ln_f = nn.LayerNorm(
+            embed_dim
+        )
+
+        # IMPORTANT:
+        # The training model tied lm_head weights
+        # to token_embedding.
+        self.lm_head = nn.Linear(
+            embed_dim,
+            vocab_size,
+            bias=False
+        )
+
+        self.lm_head.weight = (
+            self.token_embedding.weight
+        )
+
+    def forward(self, idx):
+
+        B, T = idx.shape
+
+        if T > self.context_size:
+            idx = idx[:, -self.context_size:]
+
+            T = self.context_size
+
+        positions = torch.arange(
+            T,
+            device=idx.device
+        )
+
+        token_emb = self.token_embedding(idx)
+
+        position_emb = self.position_embedding(
+            positions
+        )
+
+        x = token_emb + position_emb
+
+        for block in self.blocks:
+
+            x = block(x)
+
+        x = self.ln_f(x)
+
+        logits = self.lm_head(x)
+
+        return logits
 
 
 # ============================================================
