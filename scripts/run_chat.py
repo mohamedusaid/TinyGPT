@@ -57,6 +57,13 @@ def parse_args():
         default=None,
         help="'cuda' or 'cpu' (auto-detected if None)",
     )
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="auto",
+        choices=["auto", "float16", "bfloat16", "float32"],
+        help="Inference precision: 'auto' (FP16 on GPU, FP32 on CPU), 'float16', 'bfloat16', or 'float32'",
+    )
     return parser.parse_args()
 
 
@@ -66,6 +73,15 @@ def main():
     device_str = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     device = torch.device(device_str)
 
+    if args.dtype == "float16":
+        target_dtype = torch.float16
+    elif args.dtype == "bfloat16":
+        target_dtype = torch.bfloat16
+    elif args.dtype == "float32":
+        target_dtype = torch.float32
+    else:  # auto
+        target_dtype = torch.float16 if device.type == "cuda" else torch.float32
+
     tokenizer = GPT2Tokenizer()
 
     if not os.path.exists(args.checkpoint):
@@ -74,20 +90,28 @@ def main():
         sys.exit(1)
 
     print(f"Loading checkpoint from: {args.checkpoint}...")
-    checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
+    checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
 
-    config_dict = checkpoint.get("config", {})
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        state_dict = checkpoint["model_state_dict"]
+        config_dict = checkpoint.get("config", {})
+    elif isinstance(checkpoint, dict):
+        state_dict = checkpoint
+        config_dict = {}
+    else:
+        raise ValueError(f"Unrecognized checkpoint format in: {args.checkpoint}")
+
     if config_dict:
         config = TinyGPTConfig.from_dict(config_dict)
     else:
         config = TinyGPTConfig()
 
     model = TinyGPT500M(config)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.to(device)
+    model.load_state_dict(state_dict)
+    model.to(dtype=target_dtype, device=device)
     model.eval()
 
-    print(f"Model loaded successfully ({model.count_parameters():,} parameters) on {device}.")
+    print(f"Model loaded successfully ({model.count_parameters():,} parameters) on {device} [{target_dtype}].")
 
     if args.prompt:
         print(f"\nPrompt: {args.prompt}")
