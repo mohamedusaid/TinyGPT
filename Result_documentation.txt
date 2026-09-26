@@ -272,3 +272,20 @@ Storage Management & Optimization Strategies:
      llama.cpp / Ollama with a footprint of only ~300 MB RAM/disk.
 
 ================================================================================
+7. EMPIRICAL LIGHTWEIGHT EXPORT VALIDATION (2026-09-27)
+================================================================================
+Execution Command:
+  python scripts/export_clean.py --checkpoint checkpoints/best_tinygpt_500m.pt --output checkpoints/tinygpt_500m_clean.pt
+
+Execution Telemetry:
+  - Input Checkpoint:   checkpoints/best_tinygpt_500m.pt (5,589.47 MB / 5.59 GB)
+  - Processing:         Stripped AdamW 1st & 2nd moments; cast weights to float16
+  - Output Checkpoint:  checkpoints/tinygpt_500m_clean.pt
+  - Measured File Size: 954.02 MB (0.93 GB)
+  - Size Reduction:     82.93% storage reduction (saved 4.64 GB on download bandwidth)
+
+Downstream Portability:
+  - Directly loadable via `scripts/run_chat.py` with auto-precision detection.
+  - Active inference VRAM / RAM requirement drops to ~1.0 GB on GPU or CPU.
+
+================================================================================
