@@ -37,13 +37,13 @@ def check_environment():
         print(f"Total VRAM:              {vram_total_gb:.2f} GiB ({props.total_memory / (1024 ** 2):.0f} MiB)")
 
         # 3. Precision Support
-        bf16_supported = torch.cuda.is_bf16_supported()
-        print(f"Native BF16 Support:     {bf16_supported}")
-        if bf16_supported:
+        has_native_bf16 = (capability[0] >= 8) and torch.cuda.is_bf16_supported()
+        print(f"Native Hardware BF16:    {has_native_bf16} (Ampere/Hopper only)")
+        if has_native_bf16:
             recommended_dtype = "torch.bfloat16 (Ampere/Hopper native)"
             use_scaler = False
         else:
-            recommended_dtype = "torch.float16 with GradScaler (Turing T4 / Volta)"
+            recommended_dtype = "torch.float16 with GradScaler (Tesla T4 / Turing fast tensor cores)"
             use_scaler = True
         print(f"Recommended Precision:   {recommended_dtype}")
         print(f"GradScaler Required:     {use_scaler}")

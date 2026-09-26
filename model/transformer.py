@@ -145,7 +145,12 @@ class TinyGPT500M(nn.Module):
 
         # Pass through all 30 transformer layers
         for layer in self.layers:
-            h = layer(h, cos=cos, sin=sin, kv_cache=kv_cache)
+            if self.config.gradient_checkpointing and self.training and kv_cache is None:
+                h = torch.utils.checkpoint.checkpoint(
+                    layer, h, cos, sin, None, use_reentrant=False
+                )
+            else:
+                h = layer(h, cos=cos, sin=sin, kv_cache=kv_cache)
 
         # Final normalization
         h = self.norm(h)

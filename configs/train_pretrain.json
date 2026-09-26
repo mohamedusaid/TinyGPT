@@ -1,7 +1,8 @@
 {
   "experiment_name": "tinygpt_500m_pretrain",
-  "micro_batch_size": 2,
-  "gradient_accumulation_steps": 32,
+  "micro_batch_size": 1,
+  "gradient_accumulation_steps": 64,
+  "gradient_checkpointing": true,
   "sequence_length": 1024,
   "max_steps": 2000,
   "learning_rate": 3e-4,

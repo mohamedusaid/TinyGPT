@@ -8,6 +8,10 @@ import math
 import os
 import sys
 import time
+
+# Prevent CUDA memory fragmentation
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 import torch
 import torch.nn as nn
 
@@ -40,7 +44,11 @@ class Trainer:
         self.model.to(self.device)
 
         if self.device.type == "cuda":
-            if torch.cuda.is_bf16_supported():
+            # Hardware BF16 Tensor Cores are only available on Ampere (sm_80+) or Hopper (sm_90+)
+            # Turing (Tesla T4, sm_75) does NOT have hardware BF16; it has fast FP16 Tensor Cores.
+            major, _ = torch.cuda.get_device_capability(0)
+            has_native_bf16 = (major >= 8) and torch.cuda.is_bf16_supported()
+            if has_native_bf16:
                 self.dtype = torch.bfloat16
                 self.use_scaler = False
                 self.precision_desc = "AMP BF16 (Native Ampere/Hopper)"
@@ -57,6 +65,10 @@ class Trainer:
             self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_scaler)
         else:
             self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_scaler)
+
+        # Gradient Checkpointing (Activation Checkpointing for 16GB GPUs)
+        self.gradient_checkpointing = self.cfg.get("gradient_checkpointing", True)
+        self.model.config.gradient_checkpointing = self.gradient_checkpointing
 
         # 2. Hyperparameters
         self.micro_batch_size = self.cfg.get("micro_batch_size", 2)
@@ -112,6 +124,7 @@ class Trainer:
         print(f"Sequence Length:         {self.sequence_length:,} tokens")
         print(f"Micro-Batch Size:        {self.micro_batch_size} sequences")
         print(f"Grad Accumulation Steps: {self.gradient_accumulation_steps}")
+        print(f"Gradient Checkpointing:  {self.gradient_checkpointing}")
         print(f"Effective Tokens / Step: {self.tokens_per_step:,} tokens")
         print(f"Target Training Steps:   {self.max_steps:,} steps")
         print(

@@ -27,6 +27,7 @@ class TinyGPTConfig:
     rope_theta: float = 10000.0
     tie_word_embeddings: bool = False
     initializer_range: float = 0.02
+    gradient_checkpointing: bool = False
     target_parameters: int = 500_000_000
 
     def __post_init__(self):
