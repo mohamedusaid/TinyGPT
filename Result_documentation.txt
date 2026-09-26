@@ -178,3 +178,30 @@ Analysis of Run 2 Results (Step 1 to 100):
      - The first fully functional 500M checkpoint is now saved on disk in Colab at `checkpoints/best_tinygpt_500m.pt`.
 
 ================================================================================
+5. INFERENCE & GENERATION VALIDATION (FIRST RUN)
+================================================================================
+Checkpoint Tested:       checkpoints/best_tinygpt_500m.pt (Step 100)
+Model Parameters Loaded: 500,136,960 parameters on CUDA
+Decoding Engine:         Autoregressive sampling with dynamic KV Caching (F.scaled_dot_product_attention)
+Command:
+  python scripts/run_chat.py --checkpoint checkpoints/best_tinygpt_500m.pt --prompt "TinyGPT is" --max_tokens 80 --temperature 0.7
+
+Terminal Output:
+  Loading checkpoint from: checkpoints/best_tinygpt_500m.pt...
+  Model loaded successfully (500,136,960 parameters) on cuda.
+
+  Prompt: TinyGPT is
+  Generating completion...
+    a lot of the film.
+  [Finished generation. Reason: eos_token]
+
+Empirical Findings:
+  1. Engine Integrity: KV cache allocation, rotary embeddings, RMSNorm, untied LM head projection,
+     and nucleus/temperature sampling executed with zero errors on GPU.
+  2. Correct Stop Token: The model generated a complete grammatical phrase and accurately emitted
+     the end-of-sequence token (<|endoftext|>), cleanly halting decoding without hallucinating infinite loops.
+  3. Domain Adaptation: The output ("a lot of the film") reflects the underlying training dataset (`content.txt`),
+     which is composed of film and cinema critique text.
+
+================================================================================
+
