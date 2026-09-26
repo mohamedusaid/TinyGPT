@@ -7,8 +7,10 @@ Features gradient accumulation, gradient clipping, Cosine-Warmup scheduling, and
 import math
 import os
 import sys
+import random
 import time
 from contextlib import nullcontext
+import numpy as np
 
 # Prevent CUDA memory fragmentation
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -57,6 +59,15 @@ class Trainer:
             self.local_rank = 0
             self.world_size = 1
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Rank-distinct seeding: ensures GPU 0 and GPU 1 sample completely different sequence batches
+        base_seed = self.cfg.get("seed", 42)
+        rank_seed = base_seed + self.rank * 10007
+        random.seed(rank_seed)
+        np.random.seed(rank_seed)
+        torch.manual_seed(rank_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(rank_seed)
 
         self.model.to(self.device)
 
