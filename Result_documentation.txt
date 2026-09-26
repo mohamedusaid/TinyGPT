@@ -289,3 +289,106 @@ Downstream Portability:
   - Active inference VRAM / RAM requirement drops to ~1.0 GB on GPU or CPU.
 
 ================================================================================
+8. EXACT MATHEMATICAL FORMULA & PARAMETER ACCOUNTING (MNC STANDARD)
+================================================================================
+Master Parameter Equation:
+  P = P_embedding + N * (P_attention + P_MLP + P_norm) + P_final_norm + P_output
+
+Architectural Variables for TinyGPT-500M:
+  - Vocabulary size (V):                  50,257 (GPT-2 standard tiktoken)
+  - Hidden dimension (d):                 1,024
+  - Number of layers (N):                 30
+  - Query attention heads (H_q):          16 (Head dimension d_k = 1024 / 16 = 64)
+  - Key/Value attention heads (H_kv):      4 (GQA 4:1 ratio -> d_kv = 4 * 64 = 256)
+  - SwiGLU intermediate dimension (d_ff): 3,456
+  - Normalization:                        Pre-norm RMSNorm (zero-mean, scale weight only)
+  - Linear projection biases:             None (bias=False across all projections)
+  - LM Head Tying:                        Untied (tie_word_embeddings = False)
+
+Detailed Component Calculations:
+  1. Token Embedding:
+     P_embedding = V * d = 50,257 * 1,024 = 51,463,168
+
+  2. Attention Block per Layer (GQA 4:1 + RoPE):
+     - W_q (Query Proj):      d * d     = 1024 * 1024 = 1,048,576
+     - W_k (Key Proj):        d * d_kv  = 1024 * 256  =   262,144
+     - W_v (Value Proj):      d * d_kv  = 1024 * 256  =   262,144
+     - W_o (Output Proj):     d * d     = 1024 * 1024 = 1,048,576
+     - RoPE Positional Cache: Pure trigonometric frequencies = 0
+     P_attention = d * (d + d/4 + d/4 + d) = 2.5 * d^2 = 2,621,440
+
+  3. MLP / Feed-Forward Block per Layer (3-Matrix SwiGLU):
+     - W_gate (Gate Proj):    d * d_ff  = 1024 * 3456 = 3,538,944
+     - W_up   (Up Proj):      d * d_ff  = 1024 * 3456 = 3,538,944
+     - W_down (Down Proj):    d_ff * d  = 3456 * 1024 = 3,538,944
+     P_MLP = 3 * (d * d_ff) = 3 * (1024 * 3456) = 10,616,832
+
+  4. RMSNorm Layers per Layer:
+     - input_layernorm:           d = 1024
+     - post_attention_layernorm:  d = 1024
+     P_norm = 2 * d = 2 * 1024 = 2,048
+
+  5. Total per Transformer Block:
+     P_block = P_attention + P_MLP + P_norm
+     P_block = 2,621,440 + 10,616,832 + 2,048 = 13,240,320
+
+     Across all N = 30 layers:
+     30 * P_block = 30 * 13,240,320 = 397,209,600
+
+  6. Final Normalization Layer:
+     P_final_norm = d = 1,024
+
+  7. Output Projection Head (Untied):
+     P_output = V * d = 50,257 * 1,024 = 51,463,168
+
+The Master Formula Evaluated:
+  P = P_embedding + N * (P_attention + P_MLP + P_norm) + P_final_norm + P_output
+  P = 51,463,168 + 30 * (2,621,440 + 10,616,832 + 2,048) + 1,024 + 51,463,168
+  P = 51,463,168 + 30 * (13,240,320) + 1,024 + 51,463,168
+  P = 51,463,168 + 397,209,600 + 1,024 + 51,463,168
+  P = 500,136,960
+
+Component Summary Table:
+  Component                     Symbolic Formula          Exact Params     Ratio
+  --------------------------------------------------------------------------------
+  Token Embedding               V * d                      51,463,168     10.29%
+  Attention Layers (30x)        30 * 2.5 * d^2             78,643,200     15.72%
+  SwiGLU MLP Layers (30x)       30 * (3 * d * d_ff)       318,504,960     63.68%
+  RMSNorms (61x total)          (30 * 2 + 1) * d               62,464      0.01%
+  Output Head (Untied)          V * d                      51,463,168     10.29%
+  --------------------------------------------------------------------------------
+  Total Model Parameters (P)    Sum of all above          500,136,960    100.00%
+  Target: 500,000,000 | Difference: +136,960 (+0.027% deviation)
+
+
+================================================================================
+9. SCALING PROGRESSION & CROSS-MODEL COMPARISON (6.84M -> 15.3M -> 500.14M -> ~1.12B)
+================================================================================
+Component             ~6.84M TinyGPT     ~15.3M Model        500M Model (Actual)  ~1.1B Model (General)
+----------------------------------------------------------------------------------------------------
+Vocabulary (V)        50,257             50,257              50,257               151,643
+Hidden size (d)       128                256                 1,024                2,048
+Layers (N)            2                  3                   30                   24
+Attention             MHA, 4 heads       MHA, 8 heads        GQA 16Q / 4KV        GQA / MHA
+FFN Architecture      4x GELU (512)      4x GELU (1024)      SwiGLU (3456)        SwiGLU (5632)
+Position Encoding     Learned (64 ctx)   Learned (256 ctx)   RoPE (0 params)      RoPE (0 params)
+Token Embedding       6.433M             12.866M             51.463M              310.565M
+Position Embedding    0.008M             0.066M              0                    0
+Attention Total       ~0.098M            0.790M              78.643M              402.653M
+FFN / MLP Total       ~0.263M            1.577M              318.505M             402.653M
+Normalization         ~0.001M            0.004M              0.062M               ~0.20M
+Output Head           Tied (0 extra)     Tied (0 extra)      51.463M (Untied)     Tied (0 extra)
+----------------------------------------------------------------------------------------------------
+Total Parameters      6.837M             15,301,120 (~15.3M) 500,136,960          ~1.116B
+
+Model Growth Progression:
+  6.84M  -- (2.24x) -->  15.30M  -- (32.69x leap) -->  500.14M  -- (2.23x) -->  ~1.116B
+
+Key Architectural Evolution:
+  1. Reasoning Capacity Shift: In 6.84M and 15.3M, embeddings were >84% of all parameters.
+     In 500M, embeddings are only 10.3%, while MLP + Attention account for 79.4% (reasoning core).
+  2. Rotary Position (RoPE): Eliminates learned vectors entirely, allowing dynamic context scaling.
+  3. Grouped-Query Attention (GQA): Reduces KV cache footprint by 75% for fast, memory-efficient inference.
+  4. Untied Representation: Independent embedding vs. unembedding representation spaces.
+
+================================================================================
