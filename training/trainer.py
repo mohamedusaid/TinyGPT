@@ -121,16 +121,21 @@ class Trainer:
 
     @torch.no_grad()
     def evaluate(self) -> float:
-        """Evaluates model validation loss."""
+        """
+        Evaluates model validation loss deterministically across validation shards.
+        The exact same sequence batches are evaluated on every evaluation step.
+        """
         if self.val_dataset is None:
             return 0.0
 
         self.model.eval()
         total_loss = 0.0
 
-        for _ in range(self.eval_batches):
-            x, y = self.val_dataset.get_batch(
-                self.micro_batch_size, device=self.device
+        for i in range(self.eval_batches):
+            x, y = self.val_dataset.get_deterministic_batch(
+                batch_idx=i,
+                batch_size=self.micro_batch_size,
+                device=self.device,
             )
             with torch.autocast(
                 device_type=self.device.type,
@@ -143,12 +148,17 @@ class Trainer:
         self.model.train()
         return total_loss / self.eval_batches
 
-    def train(self, start_step: int = 0):
-        """Runs the main training loop."""
+    def train(self, start_step: int = 0, best_val_loss: float = float("inf")):
+        """
+        Runs the main training loop.
+
+        Args:
+            start_step: Starting optimizer step (e.g. from resumed checkpoint).
+            best_val_loss: Restored best validation loss to prevent overwriting best checkpoint.
+        """
         self.print_startup_banner()
         self.model.train()
 
-        best_val_loss = float("inf")
         tokens_trained = start_step * self.tokens_per_step
         start_time = time.time()
 
@@ -159,11 +169,14 @@ class Trainer:
             self.optimizer.zero_grad(set_to_none=True)
             accum_loss = 0.0
 
+            step_shards = set()
+
             # Gradient accumulation loop
             for micro_step in range(self.gradient_accumulation_steps):
                 x, y = self.train_dataset.get_batch(
                     self.micro_batch_size, device=self.device
                 )
+                step_shards.update(self.train_dataset.last_sampled_shards)
 
                 with torch.autocast(
                     device_type=self.device.type,
@@ -212,6 +225,9 @@ class Trainer:
             else:
                 vram_str = ""
 
+            # Shard info string
+            shard_str = f" | Shards: {sorted(list(step_shards))}"
+
             # Remaining time estimation
             remaining_steps = self.max_steps - (step + 1)
             eta_seconds = remaining_steps * step_time
@@ -227,7 +243,8 @@ class Trainer:
                 f"LR: {current_lr:.2e} | "
                 f"Speed: {tok_per_sec:,.0f} tok/s | "
                 f"Step Time: {step_time:.2f}s"
-                f"{vram_str} | "
+                f"{vram_str}"
+                f"{shard_str} | "
                 f"ETA: {eta_str}"
             )
 

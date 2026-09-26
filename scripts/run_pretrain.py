@@ -89,18 +89,21 @@ def main():
         model_config.num_hidden_layers = 2
         model_config.context_size = 64
 
-        # Generate temporary dry-run shards if not present
+        # Generate temporary multi-shard test data
         dry_dir = os.path.join(REPO_ROOT, "tests", "dry_shards")
         os.makedirs(os.path.join(dry_dir, "train"), exist_ok=True)
         os.makedirs(os.path.join(dry_dir, "val"), exist_ok=True)
         import numpy as np
 
-        np.random.randint(0, 50257, size=4096, dtype=np.uint16).tofile(
-            os.path.join(dry_dir, "train", "train_000.bin")
-        )
-        np.random.randint(0, 50257, size=1024, dtype=np.uint16).tofile(
-            os.path.join(dry_dir, "val", "val_000.bin")
-        )
+        # Create 3 train shards and 2 val shards to verify multi-shard sampling
+        for s_idx in range(3):
+            np.random.randint(0, 50257, size=2048, dtype=np.uint16).tofile(
+                os.path.join(dry_dir, "train", f"train_{s_idx:03d}.bin")
+            )
+        for s_idx in range(2):
+            np.random.randint(0, 50257, size=1024, dtype=np.uint16).tofile(
+                os.path.join(dry_dir, "val", f"val_{s_idx:03d}.bin")
+            )
         args.data_dir = dry_dir
 
     # 3. Load Datasets
@@ -117,14 +120,18 @@ def main():
     train_dataset = BinaryShardedDataset(
         train_path, sequence_length=train_config.get("sequence_length", 1024)
     )
-    print(f"  Found {train_dataset.total_tokens:,} training tokens.")
+    print(f"  Found {train_dataset.total_tokens:,} training tokens across {len(train_dataset.files)} shard(s):")
+    for f_idx, (f_name, f_len) in enumerate(zip(train_dataset.files, train_dataset.shard_lengths)):
+        print(f"    - Shard {f_idx}: {os.path.basename(f_name)} ({f_len:,} tokens)")
 
     val_dataset = None
     if os.path.exists(val_path):
         val_dataset = BinaryShardedDataset(
             val_path, sequence_length=train_config.get("sequence_length", 1024)
         )
-        print(f"  Found {val_dataset.total_tokens:,} validation tokens.")
+        print(f"  Found {val_dataset.total_tokens:,} validation tokens across {len(val_dataset.files)} shard(s):")
+        for f_idx, (f_name, f_len) in enumerate(zip(val_dataset.files, val_dataset.shard_lengths)):
+            print(f"    - Shard {f_idx}: {os.path.basename(f_name)} ({f_len:,} tokens)")
 
     # 4. Instantiate Model
     print("Instantiating TinyGPT model...")
@@ -141,6 +148,7 @@ def main():
 
     # 6. Resume from Checkpoint if requested
     start_step = 0
+    best_val_loss = float("inf")
     if args.resume:
         checkpoint = trainer.checkpoint_manager.load(
             args.resume,
@@ -151,9 +159,10 @@ def main():
             device=trainer.device.type,
         )
         start_step = checkpoint.get("step", 0)
+        best_val_loss = checkpoint.get("val_loss", float("inf"))
 
     # 7. Start Pretraining
-    trainer.train(start_step=start_step)
+    trainer.train(start_step=start_step, best_val_loss=best_val_loss)
 
 
 if __name__ == "__main__":
