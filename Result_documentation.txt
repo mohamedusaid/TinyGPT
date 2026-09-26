@@ -1,0 +1,136 @@
+================================================================================
+                    TINYGPT-500M TRAINING & EXPERIMENT LOG
+================================================================================
+Project:       TinyGPT-500M (Scaling from 15.3M to ~500M Causal LM)
+Repository:    mohamedusaid/TinyGPT
+Branch:        scaling-up-500m
+Author:        Mohamed Usaid
+Last Updated:  2026-09-26
+
+================================================================================
+1. MODEL ARCHITECTURE & COMPONENT VALUES COMPARISON
+================================================================================
+
+Parameter / Component          15.3M Baseline Model           TinyGPT-500M Target
+--------------------------------------------------------------------------------
+Model Type                     GPT-2 Decoder Causal LM        Modern MNC Causal LM
+Vocabulary Size                50,257 (GPT-2 tiktoken)        50,257 (GPT-2 tiktoken)
+Context Length                 256 tokens                     1,024 tokens (extensible to 2,048)
+Hidden Size (d_model)          256                            1,024 (scaled 4x)
+Transformer Layers (L)         3 layers                       30 layers (scaled 10x)
+Query Attention Heads (H_q)    8 heads                        16 heads (scaled 2x)
+Key/Value Heads (H_kv)         8 heads (MHA 1:1)              4 heads (GQA 4:1 ratio)
+Head Dimension (d_head)        32 (256/8)                     64 (1024/16, Tensor Core optimal)
+MLP / Feed-Forward Network     2-layer GELU (4x: 1024)        3-matrix SwiGLU (d_ff: 3,456)
+Positional Encoding            Learned Absolute Embedding     Rotary RoPE (theta=10,000, 0 params)
+Normalization                  nn.LayerNorm (with bias/mean)  Pre-norm RMSNorm (zero-mean, no bias)
+LM Head Tying                  Tied (shared with embedding)   Untied (independent weights)
+Attention Implementation       Standard PyTorch Attention     PyTorch Native SDPA (auto-backend)
+Gradient Checkpointing         Disabled                       Configurable (Enabled for 16GB GPUs)
+
+--------------------------------------------------------------------------------
+EXACT 500M PARAMETER BREAKDOWN:
+--------------------------------------------------------------------------------
+Target Parameters:             500,000,000
+Actual Total Parameters:       500,136,960
+Difference:                    +136,960 (+0.027%)
+
+  1. Token Embeddings (V=50257, d=1024):       51,463,168 (10.29%)
+  2. LM Head (Untied, d=1024, V=50257):        51,463,168 (10.29%)
+  3. RoPE Positional Encoding:                          0  (0.00%)
+  4. Attention Layers (30 layers):             78,643,200 (15.72%)
+       - W_q Proj (1024 -> 1024):              31,457,280
+       - W_k Proj (1024 -> 256):                7,864,320
+       - W_v Proj (1024 -> 256):                7,864,320
+       - W_o Proj (1024 -> 1024):              31,457,280
+  5. SwiGLU MLP Layers (30 layers):           318,504,960 (63.68%)
+       - W_gate Proj (1024 -> 3456):          106,168,320
+       - W_up Proj   (1024 -> 3456):          106,168,320
+       - W_down Proj (3456 -> 1024):          106,168,320
+  6. RMSNorm Layers (61 norms):                    62,464  (0.01%)
+--------------------------------------------------------------------------------
+Total Trainable Parameters:                   500,136,960 (100.00%)
+
+
+================================================================================
+2. HISTORICAL BASELINE: 15.3M MODEL TRAINING RUN (MEASURED ON TESLA T4)
+================================================================================
+Hardware:        Google Colab Tesla T4 (16 GB VRAM)
+CUDA Version:    12.8
+Total Time:      14.03 minutes (5,000 steps)
+Throughput:      17.7 seconds / 100 steps (~23,140 tokens / sec)
+Batch Geometry:  Batch Size = 16, Context = 256 -> 4,096 tokens / step
+Total Tokens:    130,798 unique training tokens, 12,339 val tokens (143,137 total)
+Tokens Seen:     5,000 steps x 4,096 tokens = 20,480,000 tokens (~156.5 Epochs)
+
+Training Progression:
+  Step    0 | Train Loss: 10.5574 | Val Loss: 10.5697
+  Step  250 | Train Loss:  4.7624 | Val Loss:  5.8446
+  Step  500 | Train Loss:  3.5097 | Val Loss:  5.6621
+  Step  750 | Train Loss:  2.5365 | Val Loss:  5.6054  <-- OPTIMAL VALIDATION CHECKPOINT (~23.5 Epochs)
+  Step 1000 | Train Loss:  1.7372 | Val Loss:  5.6134
+  Step 1500 | Train Loss:  0.7519 | Val Loss:  6.5557  <-- Overfitting begins
+  Step 2500 | Train Loss:  0.1663 | Val Loss:  7.0479
+  Step 4000 | Train Loss:  0.0835 | Val Loss:  7.7507
+  Step 4999 | Train Loss:  0.0757 | Val Loss:  7.9367  <-- Severe memorization (+2.33 val loss drift)
+
+Key Learning:
+A small dataset (~130k tokens) memorizes after ~20-25 epochs. For 500M, streaming 
+unique tokens or monitoring validation loss to checkpoint at the inflection point is required.
+
+
+================================================================================
+3. COLAB EXPERIMENT RUN 1: 500M INITIAL SMOKE TEST (2026-09-26)
+================================================================================
+Environment:
+  - Hardware: Tesla T4 (14.56 GiB total capacity)
+  - Platform: Google Colab
+  - Datasets Tokenized: content.txt (756 KB) + qa_content.txt (225 KB)
+  - Prepared Shards:
+      * Train: 99,290 tokens across 4 shards (30k, 30k, 30k, 9.2k)
+      * Val:   4,599 tokens across 1 shard
+      * Total: 103,889 tokens
+
+Run 1 Configuration:
+  - Sequence Length:         1,024 tokens
+  - Micro-Batch Size:        2 sequences
+  - Grad Accumulation Steps: 32 micro-batches
+  - Effective Batch Size:    65,536 tokens / step
+  - Precision Selected:      AMP BF16 (Reported by PyTorch 2.11+)
+
+Run 1 Result:
+  Step 1/2000 | Train Loss: 11.0044 | Grad Norm: 16.85 | Speed: 731 tok/s | Step Time: 89.70s | VRAM: 13.5 GiB
+  Step 2: CUDA out of memory (Tried to allocate 128.00 MiB; 14.28 GiB allocated, 14.55 GiB in use).
+
+Diagnosis & Root Causes:
+  1. Software BF16 Emulation: PyTorch 2.11 falsely reported native BF16 on Turing (sm_75). 
+     Turing has no BF16 Tensor Cores, falling back to slow software emulation (89.7s/step instead of ~10s).
+  2. Activation Memory Spike: With micro-batch=2 across 30 deep layers, storing all activation tensors 
+     consumed ~5.0 GB VRAM. Coupled with 9.0 GB static state, memory reached 14.55 GiB and OOMed.
+
+Fixes Implemented & Pushed (Commit: e870236):
+  1. Precision: Enforced compute capability check (major >= 8) for native BF16. 
+     Tesla T4 (sm_75) now strictly uses hardware FP16 Tensor Cores with GradScaler.
+  2. Memory Reduction: Enabled Gradient Checkpointing (recomputes layer activations on backward pass),
+     reducing activation VRAM from ~5.0 GB down to ~0.4 GB.
+  3. Batch Geometry: Set micro_batch_size = 1, gradient_accumulation_steps = 64 (same 65,536 tokens/step).
+  4. Memory Allocation: Added PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to eliminate fragmentation.
+  Expected VRAM with Fixes: ~9.2 GiB (Leaves >5.0 GiB safe headroom on 14.56 GiB T4).
+
+
+================================================================================
+4. COLAB EXPERIMENT RUN 2: (IN PROGRESS / PENDING USER RUN)
+================================================================================
+Configuration:
+  - Command:               python scripts/run_pretrain.py --data_dir data_shards
+  - Micro-Batch Size:      1 sequence
+  - Grad Accumulation:     64 steps
+  - Effective Tokens/Step: 65,536 tokens
+  - Precision:             AMP FP16 with GradScaler (Tesla T4 Tensor Cores)
+  - Gradient Checkpoint:   Enabled (True)
+  - Expected VRAM:         ~9.2 GiB
+
+Log Results:
+  [Awaiting Colab Run 2 outputs to append here]
+
+================================================================================
