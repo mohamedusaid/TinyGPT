@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyTorch checkpoints and weight files
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.gguf
+
+# Checkpoint directories
+checkpoints/
+checkpoints_sft/
+exported_hf_model/
+
+# Data directories
+data_shards/
+tests/dry_shards/
+tests/scratch_data/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

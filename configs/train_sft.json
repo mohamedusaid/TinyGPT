@@ -1,0 +1,16 @@
+{
+  "experiment_name": "tinygpt_500m_sft",
+  "base_model_checkpoint": "checkpoints/best_tinygpt_500m.pt",
+  "micro_batch_size": 2,
+  "gradient_accumulation_steps": 16,
+  "sequence_length": 1024,
+  "epochs": 3,
+  "learning_rate": 2e-5,
+  "min_lr": 2e-6,
+  "warmup_ratio": 0.05,
+  "weight_decay": 0.01,
+  "max_grad_norm": 1.0,
+  "eval_interval": 50,
+  "save_interval": 100,
+  "checkpoint_dir": "checkpoints_sft"
+}

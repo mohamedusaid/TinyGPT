@@ -1,0 +1,22 @@
+{
+  "experiment_name": "tinygpt_500m_pretrain",
+  "micro_batch_size": 2,
+  "gradient_accumulation_steps": 32,
+  "sequence_length": 1024,
+  "max_steps": 2000,
+  "learning_rate": 3e-4,
+  "min_lr": 3e-5,
+  "warmup_steps": 200,
+  "lr_scheduler_type": "cosine",
+  "weight_decay": 0.1,
+  "beta1": 0.9,
+  "beta2": 0.95,
+  "eps": 1e-8,
+  "max_grad_norm": 1.0,
+  "eval_interval": 100,
+  "eval_batches": 20,
+  "save_interval": 100,
+  "checkpoint_dir": "checkpoints",
+  "data_dir": "data_shards",
+  "seed": 42
+}
