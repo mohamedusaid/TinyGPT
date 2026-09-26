@@ -134,8 +134,8 @@ def process_streaming_data(
         tokens = enc.encode(doc, allowed_special={"<|endoftext|>"})
         tokens.append(eos_token_id)
 
-        # Route to validation if doc_count matches interval
-        if val_interval > 0 and (doc_count % val_interval == 0):
+        # Route to validation if doc_count matches interval (e.g. every 20th document)
+        if val_interval > 0 and (doc_count % val_interval == val_interval - 1):
             val_writer.add_tokens(tokens)
         else:
             train_writer.add_tokens(tokens)
@@ -159,14 +159,27 @@ def process_streaming_data(
 def main():
     parser = argparse.ArgumentParser(description="Prepare streaming data shards for TinyGPT-500M")
     parser.add_argument("--output_dir", type=str, default="data_shards", help="Output directory")
+    parser.add_argument("--input_files", nargs="+", default=None, help="One or more text files to tokenize")
     parser.add_argument("--input_file", type=str, default=None, help="Path to raw text file")
     parser.add_argument("--val_ratio", type=float, default=0.05, help="Validation ratio (default 5%)")
     parser.add_argument("--shard_size", type=int, default=1_000_000, help="Tokens per shard file")
     args = parser.parse_args()
 
-    if args.input_file and os.path.exists(args.input_file):
-        print(f"Streaming from input text file: {args.input_file}")
-        doc_stream = stream_documents_from_file(args.input_file)
+    files = []
+    if args.input_files:
+        files.extend(args.input_files)
+    if args.input_file:
+        files.append(args.input_file)
+
+    valid_files = [f for f in files if os.path.exists(f)]
+
+    if valid_files:
+        print(f"Streaming from {len(valid_files)} input text file(s): {valid_files}")
+        def multi_file_stream():
+            for f in valid_files:
+                for doc in stream_documents_from_file(f):
+                    yield doc
+        doc_stream = multi_file_stream()
     else:
         print("No input text file specified. Streaming synthetic STEM documents...")
         doc_stream = stream_synthetic_documents(num_samples=2500)
