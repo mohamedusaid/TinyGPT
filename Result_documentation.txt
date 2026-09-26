@@ -225,5 +225,50 @@ Analysis:
     in only 100 optimization steps proves the convergence capability of the 500M architecture.
 
 ================================================================================
+6. STORAGE FOOTPRINT & CHECKPOINT MATHEMATICS AUDIT
+================================================================================
+Empirical Storage Measured in Google Colab:
+  - Initial Free Storage: ~65.0 GB
+  - Post-Step 100 Storage: 53.9 GB (~11.18 GB consumed)
+  - Checkpoint Files Generated:
+      * checkpoints/checkpoint_step_000100.pt: 5.59 GB
+      * checkpoints/best_tinygpt_500m.pt:        5.59 GB
 
+Mathematical Breakdown of a 500M Checkpoint:
+A complete, resumable pretraining checkpoint stores model parameters and full AdamW
+optimizer momentum/velocity buffers in FP32 precision to guarantee exact mathematical resumption.
 
+Component                                Data Type       Bytes/Param   Size on Disk
+--------------------------------------------------------------------------------
+1. Model Weights (state_dict)            float32         4 bytes       1.863 GiB (2.00 GB)
+2. AdamW 1st Moment Buffer (m_t)         float32         4 bytes       1.863 GiB (2.00 GB)
+3. AdamW 2nd Moment Buffer (v_t)         float32         4 bytes       1.863 GiB (2.00 GB)
+--------------------------------------------------------------------------------
+Total Resumable Checkpoint Footprint:    12 bytes/param                5.589 GiB (~5.59 GB)
+
+Exact Calculation:
+  500,136,960 params * 12 bytes = 6,001,643,520 bytes
+  6,001,643,520 / 1024^3 = 5.58947 GiB (exact match to Google Colab UI: 5.59 GB)
+
+Why Colab Disk Dropped by ~11.18 GB:
+  Step 100 is an evaluation milestone that set a new validation record (Val Loss: 6.7620).
+  Therefore, two independent checkpoint files were written simultaneously:
+    1. checkpoints/checkpoint_step_000100.pt (5.589 GiB)
+    2. checkpoints/best_tinygpt_500m.pt        (5.589 GiB)
+  Total disk delta: 5.589 + 5.589 = 11.178 GiB (~11.2 GB).
+
+Storage Management & Optimization Strategies:
+  1. Instant Redundancy Cleanup (Freed 5.6 GB):
+     Since both files contain identical weights at Step 100, the periodic step file
+     can be safely removed:
+       !rm checkpoints/checkpoint_step_000100.pt
+  2. Deployment / Inference Weight Stripping (Shrink to ~1.0 GB):
+     For inference and chat serving, optimizer states (m_t, v_t) are unnecessary.
+     Exporting to standard Hugging Face Safetensors in FP16 precision:
+       !python export/export_hf.py --checkpoint checkpoints/best_tinygpt_500m.pt --output_dir exported_tinygpt_500m
+     reduces file size from 5.59 GB down to ~1.00 GB (500M params * 2 bytes = ~0.93 GiB).
+  3. Quantized Edge Deployment (Shrink to ~300 MB):
+     Converting weights to 4-bit GGUF format (Q4_K_M) enables edge inference via
+     llama.cpp / Ollama with a footprint of only ~300 MB RAM/disk.
+
+================================================================================
