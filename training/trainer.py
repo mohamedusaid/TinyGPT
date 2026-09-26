@@ -8,12 +8,15 @@ import math
 import os
 import sys
 import time
+from contextlib import nullcontext
 
 # Prevent CUDA memory fragmentation
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 import torch
 import torch.nn as nn
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from model.config import TinyGPTConfig
 from model.transformer import TinyGPT500M
@@ -39,23 +42,45 @@ class Trainer:
         self.val_dataset = val_dataset
         self.cfg = train_config or {}
 
-        # 1. Device and Precision Configuration
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # 1. Device, DDP, and Precision Configuration
+        self.is_ddp = int(os.environ.get("RANK", -1)) != -1
+        if self.is_ddp:
+            if not dist.is_initialized():
+                dist.init_process_group(backend="nccl")
+            self.rank = int(os.environ["RANK"])
+            self.local_rank = int(os.environ["LOCAL_RANK"])
+            self.world_size = int(os.environ["WORLD_SIZE"])
+            self.device = torch.device(f"cuda:{self.local_rank}")
+            torch.cuda.set_device(self.device)
+        else:
+            self.rank = 0
+            self.local_rank = 0
+            self.world_size = 1
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         self.model.to(self.device)
 
         if self.device.type == "cuda":
             # Hardware BF16 Tensor Cores are only available on Ampere (sm_80+) or Hopper (sm_90+)
             # Turing (Tesla T4, sm_75) does NOT have hardware BF16; it has fast FP16 Tensor Cores.
-            major, _ = torch.cuda.get_device_capability(0)
+            major, _ = torch.cuda.get_device_capability(self.device)
             has_native_bf16 = (major >= 8) and torch.cuda.is_bf16_supported()
             if has_native_bf16:
                 self.dtype = torch.bfloat16
                 self.use_scaler = False
-                self.precision_desc = "AMP BF16 (Native Ampere/Hopper)"
+                self.precision_desc = (
+                    f"AMP BF16 ({self.world_size}x GPU DDP)"
+                    if self.is_ddp
+                    else "AMP BF16 (Native Ampere/Hopper)"
+                )
             else:
                 self.dtype = torch.float16
                 self.use_scaler = True
-                self.precision_desc = "AMP FP16 with GradScaler (Tesla T4 / Turing)"
+                self.precision_desc = (
+                    f"AMP FP16 with GradScaler ({self.world_size}x GPU DDP)"
+                    if self.is_ddp
+                    else "AMP FP16 with GradScaler (Tesla T4 / Turing)"
+                )
         else:
             self.dtype = torch.float32
             self.use_scaler = False
@@ -70,11 +95,18 @@ class Trainer:
         self.gradient_checkpointing = self.cfg.get("gradient_checkpointing", True)
         self.model.config.gradient_checkpointing = self.gradient_checkpointing
 
+        # Wrap with DistributedDataParallel if running multi-GPU
+        if self.is_ddp:
+            self.model = DDP(self.model, device_ids=[self.local_rank])
+
         # 2. Hyperparameters
-        self.micro_batch_size = self.cfg.get("micro_batch_size", 2)
-        self.gradient_accumulation_steps = self.cfg.get(
-            "gradient_accumulation_steps", 32
-        )
+        self.micro_batch_size = self.cfg.get("micro_batch_size", 1)
+        total_grad_accum = self.cfg.get("gradient_accumulation_steps", 64)
+        if self.is_ddp and self.world_size > 1:
+            self.gradient_accumulation_steps = max(1, total_grad_accum // self.world_size)
+        else:
+            self.gradient_accumulation_steps = total_grad_accum
+
         self.sequence_length = self.cfg.get("sequence_length", 1024)
         self.max_steps = self.cfg.get("max_steps", 2000)
         self.learning_rate = self.cfg.get("learning_rate", 3e-4)
@@ -108,22 +140,26 @@ class Trainer:
         self.tokens_per_step = (
             self.micro_batch_size
             * self.gradient_accumulation_steps
+            * self.world_size
             * self.sequence_length
         )
 
     def print_startup_banner(self):
+        if self.rank != 0:
+            return
+
         print("=" * 80)
         print("                    TINYGPT-500M TRAINING INITIALIZATION")
         print("=" * 80)
-        print(f"Device:                  {self.device}")
+        print(f"Device:                  {self.device} (World Size: {self.world_size})")
         if self.device.type == "cuda":
-            props = torch.cuda.get_device_properties(0)
-            print(f"Primary GPU:             {torch.cuda.get_device_name(0)}")
+            props = torch.cuda.get_device_properties(self.device)
+            print(f"Primary GPU:             {torch.cuda.get_device_name(self.device)}")
             print(f"Total VRAM:              {props.total_memory / (1024**3):.2f} GiB")
         print(f"Precision Mode:          {self.precision_desc}")
         print(f"Sequence Length:         {self.sequence_length:,} tokens")
-        print(f"Micro-Batch Size:        {self.micro_batch_size} sequences")
-        print(f"Grad Accumulation Steps: {self.gradient_accumulation_steps}")
+        print(f"Micro-Batch Size:        {self.micro_batch_size} sequences per GPU")
+        print(f"Grad Accumulation Steps: {self.gradient_accumulation_steps} (Effective Total: {self.gradient_accumulation_steps * self.world_size})")
         print(f"Gradient Checkpointing:  {self.gradient_checkpointing}")
         print(f"Effective Tokens / Step: {self.tokens_per_step:,} tokens")
         print(f"Target Training Steps:   {self.max_steps:,} steps")
@@ -141,7 +177,8 @@ class Trainer:
         if self.val_dataset is None:
             return 0.0
 
-        self.model.eval()
+        eval_model = self.model.module if hasattr(self.model, "module") else self.model
+        eval_model.eval()
         total_loss = 0.0
 
         for i in range(self.eval_batches):
@@ -155,10 +192,10 @@ class Trainer:
                 dtype=self.dtype,
                 enabled=(self.device.type == "cuda"),
             ):
-                out = self.model(x, targets=y)
+                out = eval_model(x, targets=y)
                 total_loss += out.loss.item()
 
-        self.model.train()
+        eval_model.train()
         return total_loss / self.eval_batches
 
     def train(self, start_step: int = 0, best_val_loss: float = float("inf")):
@@ -175,7 +212,8 @@ class Trainer:
         tokens_trained = start_step * self.tokens_per_step
         start_time = time.time()
 
-        print(f"Starting training loop at step {start_step + 1}...\n")
+        if self.rank == 0:
+            print(f"Starting training loop at step {start_step + 1}...\n")
 
         for step in range(start_step, self.max_steps):
             step_start = time.time()
@@ -191,21 +229,28 @@ class Trainer:
                 )
                 step_shards.update(self.train_dataset.last_sampled_shards)
 
-                with torch.autocast(
-                    device_type=self.device.type,
-                    dtype=self.dtype,
-                    enabled=(self.device.type == "cuda"),
-                ):
-                    out = self.model(x, targets=y)
-                    # Scale loss for gradient accumulation
-                    loss = out.loss / self.gradient_accumulation_steps
+                is_accumulating = micro_step < self.gradient_accumulation_steps - 1
+                sync_context = (
+                    self.model.no_sync()
+                    if (self.is_ddp and is_accumulating)
+                    else nullcontext()
+                )
 
-                accum_loss += loss.item()
+                with sync_context:
+                    with torch.autocast(
+                        device_type=self.device.type,
+                        dtype=self.dtype,
+                        enabled=(self.device.type == "cuda"),
+                    ):
+                        out = self.model(x, targets=y)
+                        loss = out.loss / self.gradient_accumulation_steps
 
-                if self.use_scaler:
-                    self.scaler.scale(loss).backward()
-                else:
-                    loss.backward()
+                    accum_loss += loss.item()
+
+                    if self.use_scaler:
+                        self.scaler.scale(loss).backward()
+                    else:
+                        loss.backward()
 
             # Unscale before clipping
             if self.use_scaler:
@@ -233,7 +278,7 @@ class Trainer:
 
             # VRAM tracking
             if self.device.type == "cuda":
-                vram_used = torch.cuda.max_memory_allocated() / (1024**3)
+                vram_used = torch.cuda.max_memory_allocated(self.device) / (1024**3)
                 vram_str = f" | VRAM: {vram_used:.1f} GiB"
             else:
                 vram_str = ""
@@ -248,20 +293,21 @@ class Trainer:
             eta_mins = int((eta_seconds % 3600) // 60)
             eta_str = f"{eta_hours}h {eta_mins:02d}m"
 
-            # Print step status
-            print(
-                f"Step {step + 1:5d}/{self.max_steps} | "
-                f"Train Loss: {accum_loss:.4f} | "
-                f"Grad Norm: {grad_norm:.2f} | "
-                f"LR: {current_lr:.2e} | "
-                f"Speed: {tok_per_sec:,.0f} tok/s | "
-                f"Step Time: {step_time:.2f}s"
-                f"{vram_str}"
-                f"{shard_str} | "
-                f"ETA: {eta_str}"
-            )
+            # Print step status on primary rank
+            if self.rank == 0:
+                print(
+                    f"Step {step + 1:5d}/{self.max_steps} | "
+                    f"Train Loss: {accum_loss:.4f} | "
+                    f"Grad Norm: {grad_norm:.2f} | "
+                    f"LR: {current_lr:.2e} | "
+                    f"Speed: {tok_per_sec:,.0f} tok/s | "
+                    f"Step Time: {step_time:.2f}s"
+                    f"{vram_str}"
+                    f"{shard_str} | "
+                    f"ETA: {eta_str}"
+                )
 
-            # Evaluation & Checkpointing
+            # Evaluation & Checkpointing on primary rank
             if (step + 1) % self.eval_interval == 0 or (step + 1) == self.max_steps:
                 val_loss = self.evaluate()
                 val_ppl = math.exp(min(val_loss, 20.0))
@@ -269,27 +315,32 @@ class Trainer:
                 if is_best:
                     best_val_loss = val_loss
 
-                print("-" * 80)
-                print(
-                    f"[EVAL] Step {step + 1} | Val Loss: {val_loss:.4f} | "
-                    f"Val PPL: {val_ppl:.2f} | Best Val Loss: {best_val_loss:.4f}"
-                )
-                saved_path = self.checkpoint_manager.save(
-                    step=step + 1,
-                    model=self.model,
-                    optimizer=self.optimizer,
-                    scheduler=self.scheduler,
-                    scaler=self.scaler if self.use_scaler else None,
-                    val_loss=val_loss,
-                    tokens_trained=tokens_trained,
-                    is_best=is_best,
-                )
-                print(f"  Checkpoint saved: {saved_path}")
-                print("-" * 80)
+                if self.rank == 0:
+                    print("-" * 80)
+                    print(
+                        f"[EVAL] Step {step + 1} | Val Loss: {val_loss:.4f} | "
+                        f"Val PPL: {val_ppl:.2f} | Best Val Loss: {best_val_loss:.4f}"
+                    )
+                    saved_path = self.checkpoint_manager.save(
+                        step=step + 1,
+                        model=self.model,
+                        optimizer=self.optimizer,
+                        scheduler=self.scheduler,
+                        scaler=self.scaler if self.use_scaler else None,
+                        val_loss=val_loss,
+                        tokens_trained=tokens_trained,
+                        is_best=is_best,
+                    )
+                    print(f"  Checkpoint saved: {saved_path}")
+                    print("-" * 80)
 
         total_time = (time.time() - start_time) / 60
-        print("\n" + "=" * 80)
-        print(f"Training Complete! Total time: {total_time:.2f} minutes.")
-        print(f"Total tokens trained: {tokens_trained:,}")
-        print(f"Best Validation Loss: {best_val_loss:.4f}")
-        print("=" * 80)
+        if self.rank == 0:
+            print("\n" + "=" * 80)
+            print(f"Training Complete! Total time: {total_time:.2f} minutes.")
+            print(f"Total tokens trained: {tokens_trained:,}")
+            print(f"Best Validation Loss: {best_val_loss:.4f}")
+            print("=" * 80)
+
+        if self.is_ddp and dist.is_initialized():
+            dist.destroy_process_group()

@@ -33,15 +33,16 @@ class CheckpointManager:
 
         save_path = os.path.join(self.checkpoint_dir, filename)
 
+        raw_model = model.module if hasattr(model, "module") else model
         checkpoint_dict = {
             "step": step,
             "val_loss": val_loss,
             "tokens_trained": tokens_trained,
-            "model_state_dict": model.state_dict(),
+            "model_state_dict": raw_model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict() if scheduler else None,
             "scaler_state_dict": scaler.state_dict() if scaler else None,
-            "config": model.config.to_dict(),
+            "config": raw_model.config.to_dict(),
             "rng": {
                 "python": random.getstate(),
                 "numpy": np.random.get_state(),
