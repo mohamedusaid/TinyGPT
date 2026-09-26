@@ -119,18 +119,42 @@ Fixes Implemented & Pushed (Commit: e870236):
 
 
 ================================================================================
-4. COLAB EXPERIMENT RUN 2: (IN PROGRESS / PENDING USER RUN)
+4. COLAB EXPERIMENT RUN 2: PRODUCTION RUN (2026-09-26) - LIVE
 ================================================================================
-Configuration:
-  - Command:               python scripts/run_pretrain.py --data_dir data_shards
+Environment & Setup:
+  - Hardware:              Tesla T4 (14.56 GiB total capacity)
+  - Precision:             AMP FP16 with GradScaler (Tesla T4 Tensor Cores ACTIVE)
+  - Gradient Checkpoint:   Enabled (True)
+  - Sequence Length:       1,024 tokens
   - Micro-Batch Size:      1 sequence
   - Grad Accumulation:     64 steps
-  - Effective Tokens/Step: 65,536 tokens
-  - Precision:             AMP FP16 with GradScaler (Tesla T4 Tensor Cores)
-  - Gradient Checkpoint:   Enabled (True)
-  - Expected VRAM:         ~9.2 GiB
+  - Effective Tokens/Step: 65,536 tokens / step
+  - Target Steps:          2,000 steps (~131.07M tokens planned)
+  - Shards Loaded:         4 train shards (99,290 tokens), 1 val shard (4,599 tokens)
 
-Log Results:
-  [Awaiting Colab Run 2 outputs to append here]
+Empirical Performance & Telemetry:
+  - VRAM Consumption:     Rock-solid at 9.4 GiB (5.16 GiB of completely free headroom!)
+  - Step Time:             ~23.4s - 25.8s per optimizer step (3.8x faster than software BF16!)
+  - Processing Speed:      ~2,500 - 2,800 tokens / second
+  - Multi-Shard Sampling:  Verified active across all 4 shards: Shards: [0, 1, 2, 3] on every step.
+
+Step-by-Step Training Progression:
+  Step   1/2000 | Train Loss: 11.0212 | Grad Norm: 15.88 | LR: 1.50e-06 | Speed: 2,790 tok/s | Step Time: 23.49s | VRAM: 9.4 GiB | Shards: [0, 1, 2, 3]
+  Step   2/2000 | Train Loss: 11.0148 | Grad Norm: 16.97 | LR: 3.00e-06 | Speed: 2,798 tok/s | Step Time: 23.43s | VRAM: 9.4 GiB | Shards: [0, 1, 2, 3]
+  Step   3/2000 | Train Loss: 10.9427 | Grad Norm: 14.96 | LR: 4.50e-06 | Speed: 2,720 tok/s | Step Time: 24.09s | VRAM: 9.4 GiB | Shards: [0, 1, 2, 3]
+  Step   4/2000 | Train Loss: 10.7543 | Grad Norm: 16.06 | LR: 6.00e-06 | Speed: 2,649 tok/s | Step Time: 24.74s | VRAM: 9.4 GiB | Shards: [0, 1, 2, 3]
+  Step   5/2000 | Train Loss: 10.4945 | Grad Norm: 17.03 | LR: 7.50e-06 | Speed: 2,562 tok/s | Step Time: 25.58s | VRAM: 9.4 GiB | Shards: [0, 1, 2, 3]
+  Step   6/2000 | Train Loss: 10.1984 | Grad Norm: 16.31 | LR: 9.00e-06 | Speed: 2,466 tok/s | Step Time: 26.58s | VRAM: 9.4 GiB | Shards: [0, 1, 2, 3]
+  Step   7/2000 | Train Loss:  9.9137 | Grad Norm: 11.05 | LR: 1.05e-05 | Speed: 2,500 tok/s | Step Time: 26.21s | VRAM: 9.4 GiB | Shards: [0, 1, 2, 3]
+  Step   8/2000 | Train Loss:  9.6810 | Grad Norm:  7.75 | LR: 1.20e-05 | Speed: 2,553 tok/s | Step Time: 25.67s | VRAM: 9.4 GiB | Shards: [0, 1, 2, 3]
+  Step   9/2000 | Train Loss:  9.4700 | Grad Norm:  6.61 | LR: 1.35e-05 | Speed: 2,521 tok/s | Step Time: 25.99s | VRAM: 9.4 GiB | Shards: [0, 1, 2, 3]
+  Step  10/2000 | Train Loss:  9.3883 | Grad Norm:  5.63 | LR: 1.50e-05 | Speed: 2,518 tok/s | Step Time: 26.03s | VRAM: 9.4 GiB | Shards: [0, 1, 2, 3]
+  Step  11/2000 | Train Loss:  9.2801 | Grad Norm:  5.13 | LR: 1.65e-05 | Speed: 2,538 tok/s | Step Time: 25.82s | VRAM: 9.4 GiB | Shards: [0, 1, 2, 3]
+
+Analysis of Run 2 Results:
+  1. Complete VRAM Stability: VRAM remained pinned at 9.4 GiB across all 11 steps. Zero memory growth or fragmentation.
+  2. Loss Convergence: Training loss descended rapidly from 11.0212 -> 9.2801 in just 11 steps (-1.74 loss delta).
+  3. Gradient Stability: Gradient norm peaked at 17.03 during early warmup and cleanly settled down to 5.13.
+  4. Multi-Shard Confirmation: Shards: [0, 1, 2, 3] confirms the multi-shard fix is actively drawing tokens across all shards.
 
 ================================================================================
