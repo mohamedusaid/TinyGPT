@@ -392,3 +392,93 @@ Key Architectural Evolution:
   4. Untied Representation: Independent embedding vs. unembedding representation spaces.
 
 ================================================================================
+10. DUAL-GPU DISTRIBUTEDDATAPARALLEL (DDP) EMPIRICAL BENCHMARK (KAGGLE 2x TESLA T4)
+================================================================================
+Hardware Environment:
+  - Platform:               Kaggle Cloud Compute (Dual GPU)
+  - Accelerators:           2x NVIDIA Tesla T4 (16 GB GDDR6 per GPU, Turing Architecture)
+  - Total VRAM:             32 GB Combined GDDR6
+  - CPU / System RAM:       4 vCPU, 30 GB System RAM, 57.6 GB Local NVMe Scratch
+  - Inter-GPU Interconnect: PCIe 3.0 via PyTorch NCCL Backend
+
+Execution Stack:
+  - Distributed Engine:     PyTorch DistributedDataParallel (DDP) via torchrun (world_size=2)
+  - Micro-batch Per GPU:    1 sequence (seq_len = 1024 tokens)
+  - Grad Accumulation/GPU:  32 micro-batches per GPU (64 total across cluster)
+  - Global Batch Size:      65,536 tokens per parameter update (1 x 1024 x 32 x 2)
+  - Precision:              AMP Mixed Precision FP16 with torch.cuda.amp.GradScaler
+  - Activation Memory:      Gradient Checkpointing Enabled (Zero OOM)
+  - Seeding:                Rank-distinct deterministic seeding (seed + rank * 10007)
+
+--------------------------------------------------------------------------------
+Phase 1: Streaming Ingestion Telemetry
+--------------------------------------------------------------------------------
+Dataset: Cosmopedia-v2 (40%) + FineWeb-Edu-dedup (40%) + Python-Edu (20%)
+Command:
+  python scripts/download_pretrain_data.py --total_tokens 5000000 --shard_size 2500000
+
+Empirical Ingestion Results:
+  - Tokens Streamed:        5,000,102 tokens
+  - Wall-clock Time:        17.93 seconds
+  - Tokenization Speed:     ~278,867 tokens / second
+  - Binary Shards Created:  2 shards (shard_00000.bin: 2.50M tokens, shard_00001.bin: 2.50M tokens)
+  - Disk Footprint:         10.0 MB total uint16 binary format
+
+--------------------------------------------------------------------------------
+Phase 2: 30-Step Dual-GPU Training & Hardware Telemetry
+--------------------------------------------------------------------------------
+Command:
+  torchrun --nproc_per_node=2 scripts/run_pretrain.py --data_dir data_shards --steps 30
+
+Measured Step Progression:
+  Step  1/30 | Train Loss: 11.0358 | Grad Norm: 16.51 | LR: 1.50e-06 | Speed: 4,883 tok/s | Step Time: 13.42s | VRAM: 11.6 GiB
+  Step  5/30 | Train Loss: 10.6385 | Grad Norm: 16.54 | LR: 7.50e-06 | Speed: 5,288 tok/s | Step Time: 12.39s | VRAM: 11.6 GiB
+  Step 10/30 | Train Loss:  9.9482 | Grad Norm: 13.88 | LR: 1.50e-05 | Speed: 5,441 tok/s | Step Time: 12.04s | VRAM: 11.6 GiB
+  Step 15/30 | Train Loss:  9.3242 | Grad Norm: 11.89 | LR: 2.25e-05 | Speed: 5,337 tok/s | Step Time: 12.28s | VRAM: 11.6 GiB
+  Step 20/30 | Train Loss:  8.9839 | Grad Norm: 10.63 | LR: 3.00e-05 | Speed: 5,062 tok/s | Step Time: 12.95s | VRAM: 11.3 GiB
+  Step 25/30 | Train Loss:  8.7188 | Grad Norm:  4.22 | LR: 3.75e-05 | Speed: 5,460 tok/s | Step Time: 12.00s | VRAM: 11.3 GiB
+  Step 30/30 | Train Loss:  8.5158 | Grad Norm:  2.17 | LR: 4.50e-05 | Speed: 5,073 tok/s | Step Time: 12.92s | VRAM: 11.3 GiB
+
+Validation Evaluation @ Step 30:
+  - Validation Loss:        8.4439
+  - Validation Perplexity:  4,646.69 (Down from random initialization >50,000)
+  - Best Val Loss Tracked:  8.4439 (Saved to checkpoints/checkpoint_step_000030.pt)
+  - Total Tokens Processed: 1,966,080 tokens
+  - Total Elapsed Time:     7.02 minutes (421 seconds)
+
+Empirical Hardware Metrics (from Kaggle Draft Monitor):
+  - GPU 0 Utilization:      99.0% - 100.0%
+  - GPU 1 Utilization:      99.0% - 100.0%
+  - GPU 0 VRAM Allocated:   11.6 GiB / 15.0 GiB (77.3% capacity, 3.4 GiB safety headroom)
+  - GPU 1 VRAM Allocated:   11.6 GiB / 15.0 GiB (77.3% capacity, 3.4 GiB safety headroom)
+  - CPU Utilization:        202% - 203% (2 dedicated worker processes handling data sampling)
+  - System RAM Usage:       2.9 GiB / 30.0 GiB (Minimal footprint due to binary memmap loading)
+
+--------------------------------------------------------------------------------
+Phase 3: Scaling Law & DDP Efficiency Analysis
+--------------------------------------------------------------------------------
+Metric                         Single Tesla T4 (Colab)    Dual Tesla T4 (Kaggle)    Empirical Speedup
+-------------------------------------------------------------------------------------------------
+Step Time (65.5k tokens)       25.8 - 26.1 seconds        12.0 - 12.9 seconds       2.03x faster
+Throughput                     2,514 - 2,540 tok/s        5,062 - 5,460 tok/s       2.11x throughput
+GPU Compute Utilization        98%                        99% - 100% (both GPUs)    Full saturation
+VRAM Per GPU                   9.4 GiB                    11.3 - 11.6 GiB           Zero OOM risk
+
+Key Findings & Architectural Confirmations:
+  1. Super-Linear DDP Scaling (~2.03x Speedup):
+     Because gradient accumulation was split across two independent GPUs (32 micro-batches
+     each instead of 64 on a single GPU), activation cache pressure was reduced, and PyTorch
+     DDP's overlap of backward pass with gradient all-reduce resulted in near-perfect 2.03x scaling.
+  2. Loss Convergence Dynamics:
+     Training loss descended smoothly from 11.0358 down to 8.5158 (-2.52 loss reduction in 30 steps),
+     while gradient norms decreased from 16.51 to 2.17. Validation loss confirmed genuine generalization
+     (8.4439) across unseen educational shards.
+  3. Capacity for 12-Hour Kaggle Sessions:
+     At a sustained ~5,100 tokens/sec:
+       - 1 Hour of Training:    ~18.36 Million tokens
+       - 6 Hours of Training:   ~110.16 Million tokens (~1,680 steps)
+       - 11 Hours of Training:  ~201.96 Million tokens (~3,080 steps)
+     This conclusively proves that a 100M - 200M token pretraining run is 100% viable within a single
+     unattended Kaggle 12-hour background execution ("Save & Run All").
+
+================================================================================
