@@ -18,6 +18,7 @@
   "eval_batches": 20,
   "save_interval": 100,
   "checkpoint_dir": "checkpoints",
+  "max_checkpoints_to_keep": 2,
   "data_dir": "data_shards",
   "seed": 42
 }

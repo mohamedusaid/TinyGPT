@@ -11,9 +11,19 @@ import numpy as np
 
 
 class CheckpointManager:
-    def __init__(self, checkpoint_dir: str = "checkpoints"):
+    def __init__(self, checkpoint_dir: str = "checkpoints", max_to_keep: int = 2):
         self.checkpoint_dir = checkpoint_dir
+        self.max_to_keep = max_to_keep
         os.makedirs(self.checkpoint_dir, exist_ok=True)
+        # Scan for existing periodic checkpoints to support clean pruning across resumes
+        self.saved_checkpoints = []
+        if os.path.exists(self.checkpoint_dir):
+            existing = [
+                os.path.join(self.checkpoint_dir, f)
+                for f in os.listdir(self.checkpoint_dir)
+                if f.startswith("checkpoint_step_") and f.endswith(".pt")
+            ]
+            self.saved_checkpoints = sorted(existing)
 
     def save(
         self,
@@ -42,7 +52,11 @@ class CheckpointManager:
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict() if scheduler else None,
             "scaler_state_dict": scaler.state_dict() if scaler else None,
-            "config": raw_model.config.to_dict(),
+            "config": (
+                raw_model.config.to_dict()
+                if hasattr(raw_model, "config") and hasattr(raw_model.config, "to_dict")
+                else (getattr(raw_model, "config", {}))
+            ),
             "rng": {
                 "python": random.getstate(),
                 "numpy": np.random.get_state(),
@@ -61,6 +75,18 @@ class CheckpointManager:
         if os.path.exists(save_path):
             os.remove(save_path)
         os.rename(temp_path, save_path)
+
+        # Track and prune older periodic checkpoints to conserve disk space
+        if filename.startswith("checkpoint_step_") and self.max_to_keep > 0:
+            if save_path not in self.saved_checkpoints:
+                self.saved_checkpoints.append(save_path)
+            while len(self.saved_checkpoints) > self.max_to_keep:
+                oldest = self.saved_checkpoints.pop(0)
+                if os.path.exists(oldest) and oldest != save_path:
+                    try:
+                        os.remove(oldest)
+                    except OSError:
+                        pass
 
         if is_best:
             best_path = os.path.join(self.checkpoint_dir, "best_tinygpt_500m.pt")

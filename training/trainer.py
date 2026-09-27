@@ -147,7 +147,10 @@ class Trainer:
             min_lr_ratio=min_lr_ratio,
         )
 
-        self.checkpoint_manager = CheckpointManager(self.checkpoint_dir)
+        max_checkpoints_to_keep = self.cfg.get("max_checkpoints_to_keep", 2)
+        self.checkpoint_manager = CheckpointManager(
+            self.checkpoint_dir, max_to_keep=max_checkpoints_to_keep
+        )
         self.tokens_per_step = (
             self.micro_batch_size
             * self.gradient_accumulation_steps
