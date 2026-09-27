@@ -73,7 +73,7 @@ def parse_args():
         "--max_checkpoints_to_keep",
         type=int,
         default=None,
-        help="Maximum periodic checkpoints to keep on disk (default: 2)",
+        help="Maximum periodic checkpoints to keep on disk (default: 1)",
     )
     return parser.parse_args()
 

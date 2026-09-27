@@ -11,7 +11,7 @@ import numpy as np
 
 
 class CheckpointManager:
-    def __init__(self, checkpoint_dir: str = "checkpoints", max_to_keep: int = 2):
+    def __init__(self, checkpoint_dir: str = "checkpoints", max_to_keep: int = 1):
         self.checkpoint_dir = checkpoint_dir
         self.max_to_keep = max_to_keep
         os.makedirs(self.checkpoint_dir, exist_ok=True)
@@ -88,9 +88,22 @@ class CheckpointManager:
                     except OSError:
                         pass
 
+        # Save best model as lightweight inference/SFT artifact (~1.86 GB vs 5.59 GB)
+        # SFT and chat only need model weights + config, not 3.73 GB optimizer buffers
         if is_best:
             best_path = os.path.join(self.checkpoint_dir, "best_tinygpt_500m.pt")
-            torch.save(checkpoint_dict, best_path)
+            best_dict = {
+                "step": step,
+                "val_loss": val_loss,
+                "tokens_trained": tokens_trained,
+                "model_state_dict": raw_model.state_dict(),
+                "config": checkpoint_dict["config"],
+            }
+            best_temp = best_path + ".tmp"
+            torch.save(best_dict, best_temp)
+            if os.path.exists(best_path):
+                os.remove(best_path)
+            os.rename(best_temp, best_path)
 
         return save_path
 
