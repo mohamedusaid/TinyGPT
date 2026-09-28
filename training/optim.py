@@ -5,6 +5,7 @@ Applies weight decay (e.g. 0.1) exclusively to 2D weight matrices (Linear layers
 and disables weight decay for 1D vectors (RMSNorm scales and biases).
 """
 
+import inspect
 import torch
 import torch.nn as nn
 
@@ -43,7 +44,13 @@ def configure_optimizers(
         f"{no_decay_count:,} params non-decayed."
     )
 
-    optimizer = torch.optim.AdamW(
-        optim_groups, lr=learning_rate, betas=betas, eps=eps
-    )
+    fused_available = "fused" in inspect.signature(torch.optim.AdamW).parameters
+    use_fused = fused_available and torch.cuda.is_available()
+
+    kwargs = {"lr": learning_rate, "betas": betas, "eps": eps}
+    if use_fused:
+        kwargs["fused"] = True
+        print("  - Fast CUDA Fused AdamW Kernel: Enabled")
+
+    optimizer = torch.optim.AdamW(optim_groups, **kwargs)
     return optimizer

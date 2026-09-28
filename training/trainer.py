@@ -72,6 +72,7 @@ class Trainer:
         self.model.to(self.device)
 
         if self.device.type == "cuda":
+            torch.backends.cudnn.benchmark = True
             # Hardware BF16 Tensor Cores are only available on Ampere (sm_80+) or Hopper (sm_90+)
             # Turing (Tesla T4, sm_75) does NOT have hardware BF16; it has fast FP16 Tensor Cores.
             major, _ = torch.cuda.get_device_capability(self.device)
@@ -107,16 +108,25 @@ class Trainer:
         self.model.config.gradient_checkpointing = self.gradient_checkpointing
 
         # Wrap with DistributedDataParallel if running multi-GPU
+        # gradient_as_bucket_view=True eliminates gradient tensor copies into all-reduce buffers, saving ~1 GB VRAM
         if self.is_ddp:
-            self.model = DDP(self.model, device_ids=[self.local_rank])
+            self.model = DDP(
+                self.model,
+                device_ids=[self.local_rank],
+                gradient_as_bucket_view=True,
+            )
 
         # 2. Hyperparameters
         self.micro_batch_size = self.cfg.get("micro_batch_size", 1)
         total_grad_accum = self.cfg.get("gradient_accumulation_steps", 64)
         if self.is_ddp and self.world_size > 1:
-            self.gradient_accumulation_steps = max(1, total_grad_accum // self.world_size)
+            self.gradient_accumulation_steps = max(
+                1, total_grad_accum // (self.world_size * self.micro_batch_size)
+            )
         else:
-            self.gradient_accumulation_steps = total_grad_accum
+            self.gradient_accumulation_steps = max(
+                1, total_grad_accum // self.micro_batch_size
+            )
 
         self.sequence_length = self.cfg.get("sequence_length", 1024)
         self.max_steps = self.cfg.get("max_steps", 2000)

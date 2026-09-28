@@ -98,8 +98,13 @@ class BinaryShardedDataset:
             batch_x[i] = chunk[:-1]
             batch_y[i] = chunk[1:]
 
-        x_tensor = torch.from_numpy(batch_x).to(device)
-        y_tensor = torch.from_numpy(batch_y).to(device)
+        is_cuda = (isinstance(device, torch.device) and device.type == "cuda") or (isinstance(device, str) and device.startswith("cuda"))
+        if is_cuda:
+            x_tensor = torch.from_numpy(batch_x).pin_memory().to(device, non_blocking=True)
+            y_tensor = torch.from_numpy(batch_y).pin_memory().to(device, non_blocking=True)
+        else:
+            x_tensor = torch.from_numpy(batch_x).to(device)
+            y_tensor = torch.from_numpy(batch_y).to(device)
 
         return x_tensor, y_tensor
 

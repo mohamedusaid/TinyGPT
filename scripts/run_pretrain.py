@@ -75,6 +75,12 @@ def parse_args():
         default=None,
         help="Maximum periodic checkpoints to keep on disk (default: 1)",
     )
+    parser.add_argument(
+        "--micro_batch_size",
+        type=int,
+        default=None,
+        help="Override micro_batch_size in training config (1 or 2)",
+    )
     return parser.parse_args()
 
 
@@ -93,6 +99,8 @@ def main():
 
     if args.steps is not None:
         train_config["max_steps"] = args.steps
+    if args.micro_batch_size is not None:
+        train_config["micro_batch_size"] = args.micro_batch_size
     if args.eval_interval is not None:
         train_config["eval_interval"] = args.eval_interval
     if args.save_interval is not None:
