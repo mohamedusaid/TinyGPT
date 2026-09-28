@@ -77,14 +77,19 @@ def export_to_huggingface(checkpoint_path: str, output_dir: str):
     print(f"Loading checkpoint from: {checkpoint_path}...")
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
 
-    model_state = checkpoint["model_state_dict"]
-    config_dict = checkpoint.get("config", {})
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        model_state = checkpoint["model_state_dict"]
+        config_dict = checkpoint.get("config", {})
+    else:
+        model_state = checkpoint
+        config_dict = {}
 
     print("Converting state dict to Hugging Face format...")
     hf_state_dict = convert_state_dict_to_hf(model_state)
 
     # Build Hugging Face config.json
     hf_config = {
+        "_name_or_path": "mohamedusaid/UsaidAI-500M",
         "architectures": ["LlamaForCausalLM"],
         "model_type": "llama",
         "vocab_size": config_dict.get("vocab_size", 50257),
