@@ -110,6 +110,38 @@ def passes_quality_filter(text: str, seen_hashes: Set[int]) -> bool:
 # 3. STREAMING DATASET ITERATORS
 # ==============================================================================
 
+class InfiniteStream:
+    """Wraps a streaming HuggingFace dataset into an endless, fault-tolerant iterator."""
+
+    def __init__(self, loader_fn, name: str = ""):
+        self.loader_fn = loader_fn
+        self.name = name
+        self.iterator = iter(self.loader_fn())
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                return next(self.iterator)
+            except StopIteration:
+                # Stream reached the end of the split -> seamlessly restart from beginning
+                self.iterator = iter(self.loader_fn())
+                try:
+                    return next(self.iterator)
+                except Exception:
+                    time.sleep(0.5)
+            except Exception:
+                time.sleep(1.0 + attempt)
+                try:
+                    self.iterator = iter(self.loader_fn())
+                except Exception:
+                    pass
+        raise RuntimeError(f"Stream '{self.name}' failed to deliver samples after {max_retries} attempts.")
+
+
 def get_streaming_dataset_iterators():
     """
     Initializes streaming iterators from the premier sub-1B educational & multi-language corpus:
@@ -128,21 +160,36 @@ def get_streaming_dataset_iterators():
 
     print("Connecting to Hugging Face streaming endpoints...")
     print("  [1/5] Streaming subset: Cosmopedia-v2 (Textbooks, STEM, World facts)")
-    cosmo = load_dataset("HuggingFaceTB/smollm-corpus", "cosmopedia-v2", split="train", streaming=True)
+    cosmo = InfiniteStream(
+        lambda: load_dataset("HuggingFaceTB/smollm-corpus", "cosmopedia-v2", split="train", streaming=True),
+        name="Cosmopedia-v2",
+    )
 
     print("  [2/5] Streaming subset: FineWeb-Edu-dedup (Curated educational web)")
-    fineweb = load_dataset("HuggingFaceTB/smollm-corpus", "fineweb-edu-dedup", split="train", streaming=True)
+    fineweb = InfiniteStream(
+        lambda: load_dataset("HuggingFaceTB/smollm-corpus", "fineweb-edu-dedup", split="train", streaming=True),
+        name="FineWeb-Edu",
+    )
 
     print("  [3/5] Streaming subset: Python-Edu (Clean Python code & algorithms)")
-    py_edu = load_dataset("HuggingFaceTB/smollm-corpus", "python-edu", split="train", streaming=True)
+    py_edu = InfiniteStream(
+        lambda: load_dataset("HuggingFaceTB/smollm-corpus", "python-edu", split="train", streaming=True),
+        name="Python-Edu",
+    )
 
     print("  [4/5] Streaming subset: OpenHermes-100k (Multi-language programming pool)")
-    multi_code_pool = load_dataset("HuggingFaceTB/smoltalk", "openhermes-100k", split="train", streaming=True)
+    multi_code_pool = InfiniteStream(
+        lambda: load_dataset("HuggingFaceTB/smoltalk", "openhermes-100k", split="train", streaming=True),
+        name="OpenHermes-100k",
+    )
 
     print("  [5/5] Streaming subset: Everyday Conversations (Conversational flow & dialogue)")
-    chat_dialogues = load_dataset("HuggingFaceTB/smoltalk", "everyday-conversations", split="train", streaming=True)
+    chat_dialogues = InfiniteStream(
+        lambda: load_dataset("HuggingFaceTB/smoltalk", "everyday-conversations", split="train", streaming=True),
+        name="Everyday-Conversations",
+    )
 
-    return iter(cosmo), iter(fineweb), iter(py_edu), iter(multi_code_pool), iter(chat_dialogues)
+    return cosmo, fineweb, py_edu, multi_code_pool, chat_dialogues
 
 
 # Curated multi-language code fallbacks in case external stream has low density of specific languages
@@ -206,21 +253,21 @@ def stream_multi_discipline_documents(total_tokens_target: int):
         text = ""
         try:
             if slot == "cosmo":
-                for _ in range(5):
+                for _ in range(10):
                     raw = extract_text_from_sample(next(cosmo_iter))
                     if passes_quality_filter(raw, seen_hashes):
                         text = raw
                         break
 
             elif slot == "fineweb":
-                for _ in range(5):
+                for _ in range(10):
                     raw = extract_text_from_sample(next(fineweb_iter))
                     if passes_quality_filter(raw, seen_hashes):
                         text = raw
                         break
 
             elif slot == "code_py":
-                for _ in range(5):
+                for _ in range(10):
                     raw = extract_text_from_sample(next(py_iter))
                     if is_python_code(raw) and passes_quality_filter(raw, seen_hashes):
                         text = raw
@@ -251,7 +298,7 @@ def stream_multi_discipline_documents(total_tokens_target: int):
                     text = next(java_synth_cycle)
 
             elif slot == "chat":
-                for _ in range(5):
+                for _ in range(10):
                     raw = extract_text_from_sample(next(chat_iter))
                     if passes_quality_filter(raw, seen_hashes):
                         text = raw
@@ -260,10 +307,8 @@ def stream_multi_discipline_documents(total_tokens_target: int):
             if text:
                 yield text
 
-        except StopIteration:
-            break
         except Exception:
-            time.sleep(0.5)
+            time.sleep(0.1)
             continue
 
 
