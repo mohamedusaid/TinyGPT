@@ -536,3 +536,72 @@ Branch:  scaling-up-500m
    - Direct loading: Fully compatible with `AutoModelForCausalLM.from_pretrained("exported_usaid_ai")`.
 
 ================================================================================
+================================================================================
+       USAID AI (500M) MULTI-DISCIPLINE & MULTI-LANGUAGE DATA INGESTION
+                         Created by Mohamed Usaid
+================================================================================
+Target Total Tokens: 135,000,000 tokens (135.0M)
+Tokens Per Shard:    5,000,000 tokens (5.0M)
+Validation Split:    2.0%
+Exact Recipe Blend:  30% Textbooks | 30% Web | 10% Py | 10% C/C++ | 10% Java | 10% Chat
+Destination:         data_shards
+================================================================================
+
+Starting streaming tokenization & sharding...
+Connecting to Hugging Face streaming endpoints...
+  [1/5] Streaming subset: Cosmopedia-v2 (Textbooks, STEM, World facts)
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+README.md: 7.05kB [00:00, 16.1MB/s]
+Resolving data files: 100%|████████████████| 104/104 [00:00<00:00, 28367.54it/s]
+Resolving data files: 100%|████████████████| 104/104 [00:00<00:00, 29374.25it/s]
+  [2/5] Streaming subset: FineWeb-Edu-dedup (Curated educational web)
+Resolving data files: 100%|████████████████| 104/104 [00:00<00:00, 29244.28it/s]
+Resolving data files: 100%|████████████████| 234/234 [00:00<00:00, 29973.04it/s]
+  [3/5] Streaming subset: Python-Edu (Clean Python code & algorithms)
+Resolving data files: 100%|████████████████| 104/104 [00:00<00:00, 29529.35it/s]
+  [4/5] Streaming subset: OpenHermes-100k (Multi-language programming pool)
+README.md: 9.72kB [00:00, 23.2MB/s]
+  [5/5] Streaming subset: Everyday Conversations (Conversational flow & dialogue)
+  [  0.4%] Processed 500,501 / 135,000,000 tokens | Docs: 696 | Speed: 31,412 tok/s | ETA: 01h 11m 21s
+  [  0.7%] Processed 1,000,371 / 135,000,000 tokens | Docs: 1,411 | Speed: 57,217 tok/s | ETA: 00h 39m 01s
+  [  1.1%] Processed 1,500,265 / 135,000,000 tokens | Docs: 2,166 | Speed: 80,450 tok/s | ETA: 00h 27m 39s
+  [  1.5%] Processed 2,000,319 / 135,000,000 tokens | Docs: 2,954 | Speed: 100,651 tok/s | ETA: 00h 22m 01s
+  [  1.9%] Processed 2,500,705 / 135,000,000 tokens | Docs: 3,729 | Speed: 119,148 tok/s | ETA: 00h 18m 32s
+  [  2.2%] Processed 3,000,924 / 135,000,000 tokens | Docs: 4,457 | Speed: 136,703 tok/s | ETA: 00h 16m 05s
+  [  2.6%] Processed 3,501,061 / 135,000,000 tokens | Docs: 5,170 | Speed: 150,386 tok/s | ETA: 00h 14m 34s
+  [  3.0%] Processed 4,000,155 / 135,000,000 tokens | Docs: 5,934 | Speed: 166,964 tok/s | ETA: 00h 13m 04s
+  [  3.3%] Processed 4,500,018 / 135,000,000 tokens | Docs: 6,704 | Speed: 180,894 tok/s | ETA: 00h 12m 01s
+  [  3.7%] Processed 5,000,007 / 135,000,000 tokens | Docs: 7,548 | Speed: 190,887 tok/s | ETA: 00h 11m 21s
+  [train] Flushed data_shards/train/train_shard_0000.bin (5,000,000 tokens, 9.54 MB)
+  [  4.1%] Processed 5,500,843 / 135,000,000 tokens | Docs: 8,287 | Speed: 198,841 tok/s | ETA: 00h 10m 51s
+  [  4.4%] Processed 6,000,045 / 135,000,000 tokens | Docs: 9,048 | Speed: 210,755 tok/s | ETA: 00h 10m 12s
+  [  4.8%] Processed 6,503,612 / 135,000,000 tokens | Docs: 9,841 | Speed: 223,044 tok/s | ETA: 00h 09m 36s
+  [  5.2%] Processed 7,000,209 / 135,000,000 tokens | Docs: 10,592 | Speed: 232,745 tok/s | ETA: 00h 09m 09s
+  [  5.6%] Processed 7,506,432 / 135,000,000 tokens | Docs: 11,338 | Speed: 242,675 tok/s | ETA: 00h 08m 45s
+  [  5.9%] Processed 8,000,225 / 135,000,000 tokens | Docs: 12,118 | Speed: 253,309 tok/s | ETA: 00h 08m 21s
+  [  6.3%] Processed 8,500,647 / 135,000,000 tokens | Docs: 12,859 | Speed: 261,377 tok/s | ETA: 00h 08m 03s
+  [  6.7%] Processed 9,000,212 / 135,000,000 tokens | Docs: 13,622 | Speed: 270,579 tok/s | ETA: 00h 07m 45s
+  [  7.0%] Processed 9,500,907 / 135,000,000 tokens | Docs: 14,385 | Speed: 280,238 tok/s | ETA: 00h 07m 27s
+  [  7.4%] Processed 10,000,467 / 135,000,000 tokens | Docs: 15,151 | Speed: 290,150 tok/s | ETA: 00h 07m 10s
+  [train] Flushed data_shards/train/train_shard_0001.bin (5,000,000 tokens, 9.54 MB)
+  [  7.8%] Processed 10,500,046 / 135,000,000 tokens | Docs: 15,911 | Speed: 296,218 tok/s | ETA: 00h 07m 00s
+  [  8.1%] Processed 11,000,576 / 135,000,000 tokens | Docs: 16,683 | Speed: 304,955 tok/s | ETA: 00h 06m 46s
+  [  8.5%] Processed 11,500,120 / 135,000,000 tokens | Docs: 17,432 | Speed: 313,595 tok/s | ETA: 00h 06m 33s
+  [  8.9%] Processed 12,000,680 / 135,000,000 tokens | Docs: 18,147 | Speed: 321,318 tok/s | ETA: 00h 06m 22s
+  [  9.3%] Processed 12,500,445 / 135,000,000 tokens | Docs: 18,885 | Speed: 330,021 tok/s | ETA: 00h 06m 11s
+  [  9.6%] Processed 13,008,260 / 135,000,000 tokens | Docs: 19,627 | Speed: 337,878 tok/s | ETA: 00h 06m 01s
+  [train] Flushed final data_shards/train/train_shard_0002.bin (3,175,729 tokens, 6.06 MB)
+  Finished train: 13,175,729 tokens saved across 3 shard(s).
+  [val] Flushed final data_shards/val/val_shard_0000.bin (277,868 tokens, 0.53 MB)
+  Finished val: 277,868 tokens saved across 1 shard(s).
+
+================================================================================
+                    DATA PREPARATION COMPLETE
+================================================================================
+Total Tokens Saved:      13,453,597
+  - Training Tokens:     13,175,729 (3 shards)
+  - Validation Tokens:   277,868 (1 shards)
+Total Documents:         20,330
+Total Elapsed Time:      00h 00m 39s
+Average Stream Speed:    337,984 tokens/second
+================================================================================
