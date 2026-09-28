@@ -163,7 +163,8 @@ class Trainer:
             return
 
         print("=" * 80)
-        print("                    TINYGPT-500M TRAINING INITIALIZATION")
+        print("                    USAID AI (500M) PRETRAINING ENGINE")
+        print("                         Created by Mohamed Usaid")
         print("=" * 80)
         print(f"Device:                  {self.device} (World Size: {self.world_size})")
         if self.device.type == "cuda":

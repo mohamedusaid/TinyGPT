@@ -27,10 +27,12 @@ if hasattr(sys.stdout, "reconfigure"):
 
 def get_streaming_dataset_iterators():
     """
-    Initializes streaming iterators from the premier sub-1B educational corpus:
-      - Cosmopedia-v2: Synthetic textbooks, STEM, humanities, world facts (~40%)
-      - FineWeb-Edu-dedup: High-quality web educational articles (~40%)
-      - Python-Edu: Clean Python code, algorithms, and documentation (~20%)
+    Initializes streaming iterators from the premier sub-1B educational & multi-language corpus:
+      - Cosmopedia-v2: Synthetic textbooks, STEM, humanities, multi-language algorithms (~30%)
+      - FineWeb-Edu-dedup: High-quality web educational articles (~30%)
+      - Python-Edu: Clean Python code, algorithms, and documentation (~15%)
+      - Multi-Code & Reasoning: OpenHermes multi-language programming (C, C++, Java, Python) & logic (~15%)
+      - Everyday Conversations: Real multi-turn chat dialogues for natural conversation flow (~10%)
     """
     try:
         from datasets import load_dataset
@@ -40,28 +42,36 @@ def get_streaming_dataset_iterators():
         sys.exit(1)
 
     print("Connecting to Hugging Face streaming endpoints...")
-    print("  [1/3] Streaming subset: Cosmopedia-v2 (Textbooks, STEM, World facts)")
+    print("  [1/5] Streaming subset: Cosmopedia-v2 (Textbooks, STEM, World facts)")
     cosmo = load_dataset("HuggingFaceTB/smollm-corpus", "cosmopedia-v2", split="train", streaming=True)
 
-    print("  [2/3] Streaming subset: FineWeb-Edu-dedup (Curated educational web)")
+    print("  [2/5] Streaming subset: FineWeb-Edu-dedup (Curated educational web)")
     fineweb = load_dataset("HuggingFaceTB/smollm-corpus", "fineweb-edu-dedup", split="train", streaming=True)
 
-    print("  [3/3] Streaming subset: Python-Edu (Algorithms & clean code)")
+    print("  [3/5] Streaming subset: Python-Edu (Algorithms & clean code)")
     py_edu = load_dataset("HuggingFaceTB/smollm-corpus", "python-edu", split="train", streaming=True)
 
-    return iter(cosmo), iter(fineweb), iter(py_edu)
+    print("  [4/5] Streaming subset: Multi-Code & Reasoning (C, C++, Java, Python, logic)")
+    multi_code = load_dataset("HuggingFaceTB/smoltalk", "openhermes-100k", split="train", streaming=True)
+
+    print("  [5/5] Streaming subset: Everyday Conversations (Conversational flow & dialogues)")
+    chat_dialogues = load_dataset("HuggingFaceTB/smoltalk", "everyday-conversations", split="train", streaming=True)
+
+    return iter(cosmo), iter(fineweb), iter(py_edu), iter(multi_code), iter(chat_dialogues)
 
 
 def stream_multi_discipline_documents(total_tokens_target: int):
     """
-    Interleaves documents from the 3 subsets in a balanced 2:2:1 ratio:
-      - 2 Cosmopedia docs (40%)
-      - 2 FineWeb-Edu docs (40%)
-      - 1 Python-Edu doc (20%)
+    Interleaves documents from the 5 subsets in a balanced multi-discipline ratio:
+      - 2 Cosmopedia docs (~28.5%)
+      - 2 FineWeb-Edu docs (~28.5%)
+      - 1 Python-Edu doc (~14.3%)
+      - 1 Multi-Code doc (C, C++, Java, Python algorithms) (~14.3%)
+      - 1 Everyday Conversation doc (~14.3%)
     """
-    cosmo_iter, fineweb_iter, py_iter = get_streaming_dataset_iterators()
+    cosmo_iter, fineweb_iter, py_iter, multi_code_iter, chat_iter = get_streaming_dataset_iterators()
 
-    recipe_pattern = ["cosmo", "fineweb", "cosmo", "fineweb", "py"]
+    recipe_pattern = ["cosmo", "fineweb", "code_py", "cosmo", "fineweb", "code_multi", "chat"]
     pattern_cycle = itertools.cycle(recipe_pattern)
 
     doc_count = 0
@@ -69,19 +79,38 @@ def stream_multi_discipline_documents(total_tokens_target: int):
         try:
             if source == "cosmo":
                 sample = next(cosmo_iter)
+                text = sample.get("text", "").strip()
             elif source == "fineweb":
                 sample = next(fineweb_iter)
-            else:
+                text = sample.get("text", "").strip()
+            elif source == "code_py":
                 sample = next(py_iter)
+                text = sample.get("text", "").strip()
+            elif source == "code_multi":
+                sample = next(multi_code_iter)
+                # OpenHermes format: list of messages or text
+                if "messages" in sample:
+                    turns = [f"{m.get('role', 'user').capitalize()}: {m.get('content', '')}" for m in sample["messages"]]
+                    text = "\n\n".join(turns).strip()
+                else:
+                    text = sample.get("text", "").strip()
+            elif source == "chat":
+                sample = next(chat_iter)
+                if "messages" in sample:
+                    turns = [f"{m.get('role', 'user').capitalize()}: {m.get('content', '')}" for m in sample["messages"]]
+                    text = "\n\n".join(turns).strip()
+                else:
+                    text = sample.get("text", "").strip()
+            else:
+                continue
 
-            text = sample.get("text", "").strip()
             if text:
                 doc_count += 1
                 yield text
 
         except StopIteration:
             break
-        except Exception as e:
+        except Exception:
             # Tolerant to occasional transient network hiccups on streaming
             time.sleep(1)
             continue
@@ -94,7 +123,8 @@ def build_pretrain_shards(
     val_ratio: float = 0.02,
 ):
     print("=" * 80)
-    print("       TINYGPT-500M MULTI-DISCIPLINE STREAMING DATA INGESTION")
+    print("       USAID AI (500M) MULTI-DISCIPLINE & MULTI-LANGUAGE DATA INGESTION")
+    print("                 Created by Mohamed Usaid")
     print("=" * 80)
     print(f"Target Total Tokens: {total_tokens:,} tokens ({total_tokens / 1e6:.1f}M)")
     print(f"Tokens Per Shard:    {shard_size:,} tokens ({shard_size / 1e6:.1f}M)")

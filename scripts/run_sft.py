@@ -1,5 +1,7 @@
 """
-Main CLI entrypoint to launch Supervised Fine-Tuning (SFT) on TinyGPT-500M.
+Main CLI entrypoint to launch Supervised Fine-Tuning (SFT) for Usaid AI (500M).
+Created by Mohamed Usaid.
+Aligns base pretraining checkpoints on multi-turn dialogue, coding, and identity instructions.
 """
 
 import argparse
@@ -17,10 +19,11 @@ from model.transformer import TinyGPT500M
 from data.tokenizer import GPT2Tokenizer
 from sft.sft_dataset import SFTDataset
 from sft.train_sft import SFTTrainer
+from scripts.download_sft_data import build_sft_dataset
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Run SFT on TinyGPT-500M")
+    parser = argparse.ArgumentParser(description="Run SFT for Usaid AI (500M)")
     parser.add_argument(
         "--base_model",
         type=str,
@@ -30,7 +33,7 @@ def parse_args():
     parser.add_argument(
         "--data_file",
         type=str,
-        default="data/sample_instructions.json",
+        default="data/sft_instructions.jsonl",
         help="Path to JSON/JSONL instruction dataset",
     )
     parser.add_argument(
@@ -51,26 +54,10 @@ def main():
 
     tokenizer = GPT2Tokenizer()
 
-    # Create dummy sample instructions if data_file does not exist
+    # Generate Usaid AI instruction dataset if data_file does not exist
     if not os.path.exists(args.data_file):
-        os.makedirs(os.path.dirname(args.data_file) or ".", exist_ok=True)
-        sample_data = [
-            {
-                "instruction": "Explain the concept of quantum superposition in simple terms.",
-                "response": "Quantum superposition is a fundamental principle of quantum mechanics where a physical system can exist in multiple states simultaneously until it is measured.",
-            },
-            {
-                "instruction": "Write a Python function to calculate the factorial of a number.",
-                "response": "def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)",
-            },
-            {
-                "instruction": "What is Grouped-Query Attention (GQA)?",
-                "response": "Grouped-Query Attention is an attention mechanism where multiple query heads share a single key-value head, drastically reducing memory consumption during token generation.",
-            },
-        ]
-        with open(args.data_file, "w", encoding="utf-8") as f:
-            json.dump(sample_data, f, indent=2)
-        print(f"Created sample instructions file at: {args.data_file}")
+        print(f"Instruction dataset '{args.data_file}' not found. Generating Usaid AI SFT instructions...")
+        build_sft_dataset(output_file=args.data_file, num_samples=5000)
 
     dataset = SFTDataset(
         args.data_file,

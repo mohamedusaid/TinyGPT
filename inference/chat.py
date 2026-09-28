@@ -23,7 +23,8 @@ def start_chat_session(
     max_new_tokens: int = 150,
 ):
     print("=" * 80)
-    print("             TINYGPT-500M INTERACTIVE GENERATION CONSOLE")
+    print("                  USAID AI (500M) CONVERSATIONAL CONSOLE")
+    print("                         Created by Mohamed Usaid")
     print("=" * 80)
     print("Type your prompt and press Enter. Type 'quit' or 'exit' to terminate.")
     print(f"Sampling Parameters: Temperature={temperature}, Top-p={top_p}, Max Tokens={max_new_tokens}")
@@ -38,7 +39,7 @@ def start_chat_session(
                 print("Exiting interactive session.")
                 break
 
-            print("\nTinyGPT > ", end="", flush=True)
+            print("\nUsaid AI > ", end="", flush=True)
 
             token_count = [0]
             start_time = time.time()

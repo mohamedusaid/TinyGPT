@@ -20,11 +20,11 @@ from inference.chat import start_chat_session
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Generate with TinyGPT-500M")
+    parser = argparse.ArgumentParser(description="Generate with Usaid AI (500M) — Created by Mohamed Usaid")
     parser.add_argument(
         "--checkpoint",
         type=str,
-        default="checkpoints/best_tinygpt_500m.pt",
+        default="checkpoints/usaid_ai_500m.pt",
         help="Path to trained checkpoint .pt file",
     )
     parser.add_argument(
@@ -84,13 +84,25 @@ def main():
 
     tokenizer = GPT2Tokenizer()
 
-    if not os.path.exists(args.checkpoint):
+    # Resolve checkpoint candidates
+    checkpoint_to_load = args.checkpoint
+    if not os.path.exists(checkpoint_to_load):
+        candidates = [
+            "checkpoints/best_usaid_ai_500m.pt",
+            "checkpoints/best_tinygpt_500m.pt",
+        ]
+        for c in candidates:
+            if os.path.exists(c):
+                checkpoint_to_load = c
+                break
+
+    if not os.path.exists(checkpoint_to_load):
         print(f"Error: Checkpoint not found at {args.checkpoint}")
-        print("Please train a model first using scripts/run_pretrain.py.")
+        print("Please train a model first using scripts/run_pretrain.py or scripts/run_sft.py.")
         sys.exit(1)
 
-    print(f"Loading checkpoint from: {args.checkpoint}...")
-    checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
+    print(f"Loading checkpoint from: {checkpoint_to_load}...")
+    checkpoint = torch.load(checkpoint_to_load, map_location="cpu", weights_only=False)
 
     if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
         state_dict = checkpoint["model_state_dict"]
@@ -99,7 +111,7 @@ def main():
         state_dict = checkpoint
         config_dict = {}
     else:
-        raise ValueError(f"Unrecognized checkpoint format in: {args.checkpoint}")
+        raise ValueError(f"Unrecognized checkpoint format in: {checkpoint_to_load}")
 
     if config_dict:
         config = TinyGPTConfig.from_dict(config_dict)
@@ -111,7 +123,7 @@ def main():
     model.to(dtype=target_dtype, device=device)
     model.eval()
 
-    print(f"Model loaded successfully ({model.count_parameters():,} parameters) on {device} [{target_dtype}].")
+    print(f"Usaid AI loaded successfully ({model.count_parameters():,} parameters) on {device} [{target_dtype}].")
 
     if args.prompt:
         print(f"\nPrompt: {args.prompt}")

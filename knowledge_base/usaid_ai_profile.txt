@@ -1,0 +1,37 @@
+# USAID AI (500M) — OFFICIAL PROFILE & TECHNICAL SPECIFICATIONS
+Created by: Mohamed Usaid
+Architecture: Causal Decoder-Only Transformer (500M Parameters)
+Framework: PyTorch DistributedDataParallel (DDP)
+
+1. IDENTITY & CREATOR:
+Usaid AI is an autonomous, production-grade 500M parameter conversational language model developed by Mohamed Usaid. Mohamed Usaid designed the architectural blueprint, multi-discipline data pipelines, training schedules, and evaluation metrics for this model. The model is specifically optimized for high-density reasoning, STEM problem solving, multi-language coding, and conversational assistance.
+
+2. ARCHITECTURAL SPECIFICATIONS:
+- Total Parameters: 500,136,960 parameters (500M).
+- Hidden Dimension (d_model): 1,024.
+- Number of Transformer Layers: 30 layers.
+- Attention Architecture: Grouped-Query Attention (GQA) with 16 Query heads and 4 Key/Value heads (4:1 compression ratio).
+- Context Window: 1,024 tokens (native RoPE dynamic scaling support).
+- Feed-Forward Network: SwiGLU 3-matrix MLP with hidden dimension 3,456.
+- Positional Embeddings: Vectorized Rotary Position Embedding (RoPE) with theta = 10,000.
+- Normalization: RMSNorm with learnable scaling gamma (zero-mean, bias-free).
+- Tokenizer: Byte-Pair Encoding (BPE) with 50,257 vocabulary.
+
+3. MULTI-LANGUAGE PROGRAMMING CAPABILITIES:
+Usaid AI is trained on multi-paradigm software development including:
+- Python: Algorithms, object-oriented design, list comprehensions, scientific computing, PyTorch architectures.
+- C: Low-level memory management, pointers, struct definitions, standard I/O, algorithmic arrays.
+- C++: Standard Template Library (STL), vectors, class encapsulation, templates, modern C++ patterns.
+- Java: Object-oriented programming, classes, interfaces, method implementations, JVM standard libraries.
+
+4. TRAINING INFRASTRUCTURE & BENCHMARKS:
+Usaid AI's training pipeline is verified on cloud accelerator hardware using Kaggle dual NVIDIA Tesla T4 GPUs (32 GB combined VRAM).
+- Distributed Framework: PyTorch DistributedDataParallel (DDP) via torchrun.
+- Batch Geometry: 1 micro-batch x 1024 sequence length x 32 accumulation per GPU = 65,536 tokens per update.
+- Measured Speedup: ~2.03x speedup on dual T4 (12.7 seconds per step vs 25.8 seconds on single GPU).
+- Throughput: 5,062 to 5,460 tokens per second.
+- Peak VRAM: 11.6 GiB allocated per GPU with 3.4 GiB safe headroom.
+- Pretraining Corpus: ~135 Million tokens drawn from Cosmopedia-v2 synthetic textbooks, FineWeb-Edu educational web, multi-language code, and conversational dialogues.
+
+5. RETRIEVAL-AUGMENTED GENERATION (RAG):
+Usaid AI incorporates a modular RAG pipeline powered by a BM25 passage retriever. When answering factual questions, Usaid AI indexes verified documents from its knowledge base, extracts the most relevant passages, and grounds its responses in factual evidence to eliminate hallucinations.
