@@ -482,3 +482,57 @@ Key Findings & Architectural Confirmations:
      unattended Kaggle 12-hour background execution ("Save & Run All").
 
 ================================================================================
+11. USAID AI (500M) 135M TOKEN DATA PIPELINE & INFRASTRUCTURE AUDIT (2026-09-28)
+================================================================================
+Creator: Mohamed Usaid
+Model:   Usaid AI (500,136,960 parameters)
+Branch:  scaling-up-500m
+
+1. Master 10-Slot Mathematical Data Mixture (135,000,000 Tokens Target):
+   - Academic Textbooks & STEM:  30.0% (40.5M tokens) -> Cosmopedia-v2
+   - Educational Web Articles:   30.0% (40.5M tokens) -> FineWeb-Edu-dedup (Score >= 3)
+   - Python Programming & Logic: 10.0% (13.5M tokens) -> Python-Edu
+   - Verified C / C++ Code:      10.0% (13.5M tokens) -> Syntax-verified pointers, structs, STL
+   - Verified Java Code:         10.0% (13.5M tokens) -> Syntax-verified OOP, interfaces, JVM
+   - Multi-Turn Conversations:   10.0% (13.5M tokens) -> SmolTalk-All (1M+ dialogues)
+   Total Multi-Language Code:    30.0% (40.5M tokens) guaranteed.
+
+2. Empirical Streaming Speed & Sharding Metrics:
+   - Streaming Throughput:       337,984 tokens / second (measured on Kaggle T4 cloud environment)
+   - Ingestion Duration:         ~6.5 to 7.0 minutes for full 135,000,000 tokens
+   - Disk Footprint:             27 binary shards (.bin) @ 5M tokens / 9.54 MB per shard = ~270 MB total
+   - User Bandwidth Consumed:    0 MB (streamed purely over Kaggle datacenter connection)
+
+3. InfiniteStream Architecture & Early Termination Root Cause Resolution:
+   - Root Cause Analysis: In initial streaming test, SmolTalk's `everyday-conversations`
+     subset exhausted at document 20,330 (~13.45M total tokens), raising StopIteration
+     and terminating the stream prematurely at 9.6% progress.
+   - Architectural Fix:
+     a. Implemented `InfiniteStream` wrapper around Hugging Face streaming iterators with
+        automatic restart upon exhaustion and 5x fault-tolerant retry on network latency.
+     b. Upgraded dialogue subset from `everyday-conversations` (2.38k rows) to `SmolTalk-All`
+        (1,000,000+ multi-turn dialogues and reasoning chains).
+     c. Removed top-level generator `StopIteration` catch; generator runs unconditionally
+        until target token budget (135,000,000 tokens) is fully flushed to disk.
+
+4. Mathematical Zero-Repetition Guarantee:
+   - Cosmopedia-v2:     Pool size = 28 Billion tokens  | Ingested = 40.5M (0.14% of pool)  -> Zero repeats
+   - FineWeb-Edu-dedup: Pool size = 220 Billion tokens | Ingested = 40.5M (0.018% of pool) -> Zero repeats
+   - Python-Edu:        Pool size = 4 Billion tokens   | Ingested = 13.5M (0.33% of pool)  -> Zero repeats
+   - SmolTalk-All:      Pool size = 1,000,000+ dialogs | Ingested = ~15,000 (<1.5% of pool)-> Zero repeats
+   - Active Hash Deduplication: 64-bit rolling hash window (max 100k entries) drops identical content.
+   - Repetition Filter: Discards any document where line uniqueness ratio < 0.45 (>55% repeats).
+
+5. Checkpoint Disk Quota Management (< 7.5 GiB / 19.5 GiB Quota):
+   - Periodic checkpoint limit: Capped to 1 (`max_to_keep=1`, 5.59 GB)
+   - Best model artifact: Saved with pure model weights + config (`is_best=True`, 1.86 GB)
+   - Total Working Directory Usage: Max 7.45 GiB, preventing disk quota exhaustion on Kaggle.
+
+6. Industry-Standard Safetensors & Hugging Face Export:
+   - Exporter tool: `export/export_hf.py` converts .pt checkpoints to standard Hugging Face format:
+     * `model.safetensors` (1.0 GB half-precision safe zero-copy tensor storage)
+     * `config.json` (Llama/Qwen compatible causal LM architecture metadata)
+     * `generation_config.json` (sampling parameters)
+   - Direct loading: Fully compatible with `AutoModelForCausalLM.from_pretrained("exported_usaid_ai")`.
+
+================================================================================
