@@ -183,10 +183,10 @@ def get_streaming_dataset_iterators():
         name="OpenHermes-100k",
     )
 
-    print("  [5/5] Streaming subset: Everyday Conversations (Conversational flow & dialogue)")
+    print("  [5/5] Streaming subset: SmolTalk-All (1M+ multi-turn dialogues & reasoning)")
     chat_dialogues = InfiniteStream(
-        lambda: load_dataset("HuggingFaceTB/smoltalk", "everyday-conversations", split="train", streaming=True),
-        name="Everyday-Conversations",
+        lambda: load_dataset("HuggingFaceTB/smoltalk", "all", split="train", streaming=True),
+        name="SmolTalk-All",
     )
 
     return cosmo, fineweb, py_edu, multi_code_pool, chat_dialogues
