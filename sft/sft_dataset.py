@@ -47,35 +47,53 @@ class SFTDataset(Dataset):
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         ex = self.examples[idx]
 
-        # Extract instruction and response
-        if "messages" in ex:
-            user_msg = ""
-            assistant_msg = ""
+        input_ids = []
+        target_ids = []
+
+        # 1. Multi-turn conversation format
+        if "messages" in ex and isinstance(ex["messages"], list):
             for m in ex["messages"]:
-                if m["role"] == "user":
-                    user_msg = m["content"]
-                elif m["role"] == "assistant":
-                    assistant_msg = m["content"]
-        elif "instruction" in ex:
-            user_msg = ex["instruction"]
-            assistant_msg = ex.get("response", ex.get("output", ""))
-        elif "question" in ex:
-            user_msg = ex["question"]
-            assistant_msg = ex.get("answer", "")
+                role = m.get("role", "user")
+                content = m.get("content", "").strip()
+                if not content:
+                    continue
+
+                if role == "user":
+                    turn_text = f"User: {content}\n\nAssistant: "
+                    turn_tokens = self.tokenizer.encode(turn_text)
+                    input_ids.extend(turn_tokens)
+                    target_ids.extend([-100] * len(turn_tokens))  # Mask user prompt
+                elif role == "assistant":
+                    turn_text = f"{content}<|endoftext|>\n\n"
+                    turn_tokens = self.tokenizer.encode(turn_text)
+                    input_ids.extend(turn_tokens)
+                    target_ids.extend(turn_tokens)  # Supervise assistant tokens
+
+        # 2. Single-turn instruction format
         else:
-            user_msg = str(ex)
-            assistant_msg = ""
+            if "instruction" in ex:
+                user_msg = ex["instruction"]
+                assistant_msg = ex.get("response", ex.get("output", ""))
+            elif "question" in ex:
+                user_msg = ex["question"]
+                assistant_msg = ex.get("answer", "")
+            else:
+                user_msg = str(ex)
+                assistant_msg = ""
 
-        # Format prompt and completion
-        prompt_text = f"User: {user_msg}\n\nAssistant: "
-        response_text = f"{assistant_msg}<|endoftext|>"
+            prompt_text = f"User: {user_msg}\n\nAssistant: "
+            response_text = f"{assistant_msg}<|endoftext|>"
 
-        prompt_tokens = self.tokenizer.encode(prompt_text)
-        response_tokens = self.tokenizer.encode(response_text)
+            prompt_tokens = self.tokenizer.encode(prompt_text)
+            response_tokens = self.tokenizer.encode(response_text)
 
-        input_ids = prompt_tokens + response_tokens
-        # Mask out prompt tokens with -100 (ignored by PyTorch cross_entropy)
-        target_ids = ([-100] * len(prompt_tokens)) + response_tokens
+            input_ids = prompt_tokens + response_tokens
+            target_ids = ([-100] * len(prompt_tokens)) + response_tokens
+
+        # Fallback if empty
+        if not input_ids:
+            input_ids = [self.tokenizer.eos_token_id] * 2
+            target_ids = [-100, self.tokenizer.eos_token_id]
 
         # Truncate if exceeds max length
         if len(input_ids) > self.sequence_length:

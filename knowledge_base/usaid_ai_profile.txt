@@ -34,4 +34,4 @@ Usaid AI's training pipeline is verified on cloud accelerator hardware using Kag
 - Pretraining Corpus: ~135 Million tokens drawn from Cosmopedia-v2 synthetic textbooks, FineWeb-Edu educational web, multi-language code, and conversational dialogues.
 
 5. RETRIEVAL-AUGMENTED GENERATION (RAG):
-Usaid AI incorporates a modular RAG pipeline powered by a BM25 passage retriever. When answering factual questions, Usaid AI indexes verified documents from its knowledge base, extracts the most relevant passages, and grounds its responses in factual evidence to eliminate hallucinations.
+Usaid AI incorporates a modular RAG pipeline powered by a BM25 passage retriever. When answering factual questions, Usaid AI indexes verified documents from its knowledge base, extracts the most relevant passages, and grounds its responses in factual reference material to significantly reduce hallucinations.
