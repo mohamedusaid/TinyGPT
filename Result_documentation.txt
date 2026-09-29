@@ -1002,27 +1002,45 @@ Detailed Diagnostic Breakdown:
    - In CPU inference, use repetition penalty (1.15) and temperature (0.6 - 0.7) to eliminate token stuttering.
 
 ===============================================================================
-23. FORMAL ZERO-SHOT MULTI-DOMAIN BENCHMARK EVALUATION (20 QUESTIONS)
+23. FORMAL ZERO-SHOT MULTI-DOMAIN BENCHMARK EVALUATION (PRE-SFT VS. POST-SFT)
 ===============================================================================
 Evaluation Date:            2026-09-29
-Script Used:                scripts/run_eval.py --checkpoint checkpoints/usaid_ai_500m.pt
+Script Used:                scripts/run_eval.py [--checkpoint <path>]
+Evaluation Scope:           20-Question Targeted Multi-Domain Diagnostic Probe (5 items per category)
 Scoring Methodology:        Length-normalized completion log-likelihood over 4 candidate choices (EleutherAI LM-Eval standard).
-Random Chance Baseline:     25.0%
+Random Chance Baseline:     25.0% (1 / 4)
 
-Category Performance Breakdown:
-  1. ML & Transformer Architecture:        3 / 5  (60.0%)  [GQA benefit, RoPE, RMSNorm, SwiGLU, parameter scale]
-  2. World Knowledge & Science:            3 / 5  (60.0%)  [Capitals, planetary science, chemistry, physics, creator attribution]
-  3. Python & Software Engineering:        1 / 5  (20.0%)  [Function definitions, data types, mutable structures, error handling]
-  4. Logic & Arithmetic:                   1 / 5  (20.0%)  [Arithmetic deduction, syllogisms, prime numbers, speed/time]
+Direct Head-to-Head Comparative Benchmark Scorecard:
 
-===============================================================================
-OVERALL ZERO-SHOT BENCHMARK ACCURACY:      8 / 20 (40.0%)
-===============================================================================
-Analytical Conclusion:
-- Emerging Semantic Knowledge: The model scores 60.0% (more than 2.4x random chance) in Machine Learning, Transformer Architecture,
-  and World Knowledge, demonstrating that factual and architectural concepts were successfully absorbed into its attention heads.
-- Symbolic & Program Logic: Python and arithmetic tasks scored 20.0%, reflecting the known limitation of general pretraining (131M tokens)
-  and the necessity of dedicated SFT 2.0 (e.g. CodeAlpaca-20k) for algorithmic reasoning.
++-------------------------------+-----------------------+------------------------+------------------+
+| Category                      | Pre-SFT Base Model    | Post-SFT Aligned Model | Empirical Delta  |
+|                               | (best_tinygpt_500m.pt)| (usaid_ai_500m.pt)     |                  |
++-------------------------------+-----------------------+------------------------+------------------+
+| ML & Transformer Architecture | 2 / 5 (40.0%)         | 3 / 5 (60.0%)          | +20.0% (+1 item) |
+| World Knowledge & Science     | 2 / 5 (40.0%)         | 3 / 5 (60.0%)          | +20.0% (+1 item) |
+| Python & Software Engineering | 1 / 5 (20.0%)         | 1 / 5 (20.0%)          | +0.0%  (baseline)|
+| Logic & Arithmetic            | 1 / 5 (20.0%)         | 1 / 5 (20.0%)          | +0.0%  (baseline)|
++-------------------------------+-----------------------+------------------------+------------------+
+| OVERALL DIAGNOSTIC ACCURACY   | 6 / 20 (30.0%)        | 8 / 20 (40.0%)         | +10.0% (+2 items)|
++-------------------------------+-----------------------+------------------------+------------------+
+
+Methodological Audit & Scientific Nuance:
+1. Sample Scale Context:
+   - This 20-item diagnostic probe represents an agile sanity-check rather than an exhaustive academic benchmark (such as 14k-question MMLU).
+   - Because each question accounts for 5 percentage points, results should be interpreted as directional indicators of log-likelihood
+     preference rather than general reasoning proofs.
+
+2. What SFT Measurably Improved:
+   - SFT elevated overall accuracy from 30.0% (near random chance) to 40.0%.
+   - Gains were concentrated in domain-specific architecture concepts and assistant identity/world knowledge (+20% each),
+     confirming that instruction tuning successfully sharpened log-likelihood preferences for aligned responses.
+
+3. General vs. Domain-Specific Taxonomy:
+   - Within the 5 "World Knowledge & Science" questions, 4 evaluate general external facts (capitals, planetary science, chemistry, physics)
+     while 1 evaluates project identity ("Who created Usaid AI?").
+   - The Pre-SFT Base model failed the identity question (unseen in pretraining data), whereas the Post-SFT model correctly preferred "Mohamed Usaid".
+   - In Python and Logic/Arithmetic, performance remained at 20.0% across both models, confirming that general SFT (4.7k samples) did not
+     introduce algorithmic programming knowledge—further reinforcing the need for CodeAlpaca in future iterations.
 
 ===============================================================================
 24. HUGGING FACE TOKENIZER PACKAGING & MODEL CARD READINESS
