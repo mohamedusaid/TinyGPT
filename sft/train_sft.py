@@ -54,7 +54,10 @@ class SFTTrainer:
         self.model.to(self.device)
 
         if self.device.type == "cuda":
-            if torch.cuda.is_bf16_supported():
+            torch.backends.cudnn.benchmark = True
+            major, _ = torch.cuda.get_device_capability(self.device)
+            has_native_bf16 = (major >= 8) and torch.cuda.is_bf16_supported()
+            if has_native_bf16:
                 self.dtype = torch.bfloat16
                 self.use_scaler = False
                 self.precision_desc = f"AMP BF16 ({self.world_size}x GPU)" if self.is_ddp else "AMP BF16"
