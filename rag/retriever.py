@@ -49,9 +49,10 @@ class BM25Retriever:
 
         self.avg_doc_length = total_length / max(1, self.corpus_size)
 
-    def retrieve(self, query: str, top_k: int = 3) -> List[Tuple[KnowledgeChunk, float]]:
+    def retrieve(self, query: str, top_k: int = 3, min_score: float = 3.0) -> List[Tuple[KnowledgeChunk, float]]:
         """
         Retrieves the top_k most relevant KnowledgeChunks for the query, ranked by BM25 score.
+        Filters out low-confidence matches (below min_score) to prevent context pollution.
         """
         query_tokens = tokenize_query_text(query)
         if not query_tokens or self.corpus_size == 0:
@@ -77,11 +78,11 @@ class BM25Retriever:
                 denominator = tf + self.k1 * (1.0 - self.b + self.b * (doc_len / self.avg_doc_length))
                 scores[idx] += idf * (numerator / denominator)
 
-        # Pair with chunks and sort descending
+        # Pair with chunks, enforce minimum relevance score, and sort descending
         scored_chunks = [
             (self.kb.chunks[idx], scores[idx])
             for idx in range(self.corpus_size)
-            if scores[idx] > 0
+            if scores[idx] >= min_score
         ]
         scored_chunks.sort(key=lambda x: x[1], reverse=True)
 
