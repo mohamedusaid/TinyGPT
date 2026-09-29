@@ -1042,6 +1042,124 @@ Methodological Audit & Scientific Nuance:
    - In Python and Logic/Arithmetic, performance remained at 20.0% across both models, confirming that general SFT (4.7k samples) did not
      introduce algorithmic programming knowledge—further reinforcing the need for CodeAlpaca in future iterations.
 
+Complete Question-by-Question Diagnostic Audit (All 20 Items):
+
+[Q01] Python: In Python, which keyword defines a function?
+      Choices: ['func', 'def', 'lambda', 'function']
+      Ground Truth: def
+      Pre-SFT: 'function' [WRONG] | Post-SFT: 'lambda' [WRONG] | Delta: UNRESOLVED
+
+[Q02] Python: What is the output data type of 5 / 2 in Python 3?
+      Choices: ['int', 'float', 'double', 'str']
+      Ground Truth: float
+      Pre-SFT: 'int' [WRONG] | Post-SFT: 'int' [WRONG] | Delta: UNRESOLVED
+
+[Q03] Python: Which Python data structure is mutable and ordered?
+      Choices: ['tuple', 'set', 'list', 'frozenset']
+      Ground Truth: list
+      Pre-SFT: 'frozenset' [WRONG] | Post-SFT: 'frozenset' [WRONG] | Delta: UNRESOLVED
+
+[Q04] Python: In Python, what does the 'len()' function return?
+      Choices: ['Memory address', 'Number of elements', 'Variable type', 'Hash value']
+      Ground Truth: Number of elements
+      Pre-SFT: 'Number of elements' [CORRECT] | Post-SFT: 'Number of elements' [CORRECT] | Delta: MAINTAINED (O)
+
+[Q05] Python: Which keyword in Python handles exceptions?
+      Choices: ['catch', 'try', 'rescue', 'trap']
+      Ground Truth: try
+      Pre-SFT: 'catch' [WRONG] | Post-SFT: 'catch' [WRONG] | Delta: UNRESOLVED
+
+[Q06] ML: What is the primary benefit of Grouped-Query Attention?
+      Choices: ['Reduces memory consumption of KV cache', 'Increases training loss', 'Removes positional embeddings', 'Eliminates weight decay']
+      Ground Truth: Reduces memory consumption of KV cache
+      Pre-SFT: 'Reduces memory consumption of KV cache' [CORRECT] | Post-SFT: 'Reduces memory consumption of KV cache' [CORRECT] | Delta: MAINTAINED (O)
+
+[Q07] ML: What does RoPE stand for in modern Transformer models?
+      Choices: ['Rotary Position Embedding', 'Recurrent Output Position Encoding', 'Randomized Optimization Path Estimator', 'Residual Operation Processing Engine']
+      Ground Truth: Rotary Position Embedding
+      Pre-SFT: 'Rotary Position Embedding' [CORRECT] | Post-SFT: 'Rotary Position Embedding' [CORRECT] | Delta: MAINTAINED (O)
+
+[Q08] ML: Which normalization layer replaces LayerNorm in modern LLMs like Llama and Usaid AI?
+      Choices: ['BatchNorm', 'RMSNorm', 'InstanceNorm', 'WeightNorm']
+      Ground Truth: RMSNorm
+      Pre-SFT: 'BatchNorm' [WRONG] | Post-SFT: 'BatchNorm' [WRONG] | Delta: UNRESOLVED
+
+[Q09] ML: What activation function combines Swish and Gated Linear Units?
+      Choices: ['ReLU', 'GeLU', 'SwiGLU', 'Sigmoid']
+      Ground Truth: SwiGLU
+      Pre-SFT: 'Sigmoid' [WRONG] | Post-SFT: 'SwiGLU' [CORRECT] | Delta: IMPROVED (+)
+
+[Q10] ML: What is the parameter scale of Usaid AI?
+      Choices: ['100 Million', '500 Million', '7 Billion', '70 Billion']
+      Ground Truth: 500 Million
+      Pre-SFT: '7 Billion' [WRONG] | Post-SFT: '70 Billion' [WRONG] | Delta: UNRESOLVED
+
+[Q11] Knowledge: What is the capital of France?
+      Choices: ['Berlin', 'Madrid', 'Paris', 'Rome']
+      Ground Truth: Paris
+      Pre-SFT: 'Rome' [WRONG] | Post-SFT: 'Rome' [WRONG] | Delta: UNRESOLVED (Note: In generative chat, model answers 'Paris')
+
+[Q12] Knowledge: Which planet in our solar system is known as the Red Planet?
+      Choices: ['Venus', 'Mars', 'Jupiter', 'Saturn']
+      Ground Truth: Mars
+      Pre-SFT: 'Mars' [CORRECT] | Post-SFT: 'Mars' [CORRECT] | Delta: MAINTAINED (O)
+
+[Q13] Knowledge: What chemical element has the symbol 'O' on the periodic table?
+      Choices: ['Gold', 'Osmium', 'Oxygen', 'Iron']
+      Ground Truth: Oxygen
+      Pre-SFT: 'Oxygen' [CORRECT] | Post-SFT: 'Oxygen' [CORRECT] | Delta: MAINTAINED (O)
+
+[Q14] Knowledge: What is the boiling point of water at standard sea level atmospheric pressure in Celsius?
+      Choices: ['50 degrees', '100 degrees', '200 degrees', '0 degrees']
+      Ground Truth: 100 degrees
+      Pre-SFT: '200 degrees' [WRONG] | Post-SFT: '0 degrees' [WRONG] | Delta: UNRESOLVED
+
+[Q15] Knowledge: Who created Usaid AI?
+      Choices: ['OpenAI', 'Google', 'Mohamed Usaid', 'Meta']
+      Ground Truth: Mohamed Usaid
+      Pre-SFT: 'OpenAI' [WRONG] | Post-SFT: 'Mohamed Usaid' [CORRECT] | Delta: IMPROVED (+)
+
+[Q16] Logic: What is the result of 10 plus 15?
+      Choices: ['20', '25', '30', '150']
+      Ground Truth: 25
+      Pre-SFT: '20' [WRONG] | Post-SFT: '20' [WRONG] | Delta: UNRESOLVED
+
+[Q17] Logic: If all humans are mortal, and Socrates is human, then Socrates is:
+      Choices: ['Immortal', 'Mortal', 'Greek', 'Unknown']
+      Ground Truth: Mortal
+      Pre-SFT: 'Greek' [WRONG] | Post-SFT: 'Greek' [WRONG] | Delta: ASSOCIATIVE BIAS (Web text co-occurrence "Socrates is Greek")
+
+[Q18] Logic: Which number is an even prime number?
+      Choices: ['2', '3', '5', '7']
+      Ground Truth: 2
+      Pre-SFT: '3' [WRONG] | Post-SFT: '3' [WRONG] | Delta: UNRESOLVED
+
+[Q19] Logic: If a train travels at 60 miles per hour, how many miles does it travel in 2 hours?
+      Choices: ['30', '60', '120', '180']
+      Ground Truth: 120
+      Pre-SFT: '120' [CORRECT] | Post-SFT: '120' [CORRECT] | Delta: MAINTAINED (O)
+
+[Q20] Logic: Which word is the opposite of 'hot'?
+      Choices: ['Warm', 'Cold', 'Spicy', 'Bright']
+      Ground Truth: Cold
+      Pre-SFT: 'Spicy' [WRONG] | Post-SFT: 'Spicy' [WRONG] | Delta: COLLOCATION BIAS (High bigram frequency "hot and spicy")
+
+Key Empirical Findings & AI Behavioral Phenomena:
+1. Improvements Induced by SFT (2 Questions):
+   - Q09: SwiGLU activation successfully learned and prioritized over Sigmoid.
+   - Q15: Creator identity successfully conditioned to Mohamed Usaid (overcoming raw base pretraining bias towards OpenAI).
+2. Solid Strengths Maintained Across Both Checkpoints (6 Questions):
+   - Architecture: GQA (KV cache memory reduction), RoPE (Rotary Position Embedding).
+   - Knowledge: Mars (Red Planet), Oxygen (Symbol O).
+   - Software & Arithmetic: len() (Number of elements), Speed/Distance (60 mph * 2 hrs = 120 miles).
+3. Zero Regressions:
+   - SFT did not degrade or cause catastrophic forgetting on any question that the base model answered correctly (0 regressions).
+4. Machine Learning Behavioral Phenomena:
+   - Syllogism Bias (Socrates): Latched onto biographical co-occurrence ("Greek") rather than formal syllogistic deduction ("Mortal").
+   - Collocation Bias (Hot & Spicy): Food/recipe web text bigram frequency ("hot & spicy") overpowered semantic antonym selection ("cold").
+   - Generative vs. Multiple-Choice Divergence: In free-form generation ("User: What is the capital of France?"), the model generates
+     "The capital of France is Paris." under greedy decoding, while in prompt-completion log-prob scoring, "Rome" had marginally higher completion likelihood.
+
 ===============================================================================
 24. HUGGING FACE TOKENIZER PACKAGING & MODEL CARD READINESS
 ===============================================================================
