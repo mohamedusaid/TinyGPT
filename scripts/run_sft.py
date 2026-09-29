@@ -45,6 +45,40 @@ def parse_args():
     return parser.parse_args()
 
 
+def resolve_base_model_path(path: str) -> str:
+    """
+    Resolves the base model checkpoint path, automatically searching /kaggle/input
+    and common checkpoint folders if the exact path does not exist.
+    """
+    if os.path.exists(path):
+        return path
+
+    candidates = [
+        "checkpoints/best_tinygpt_500m.pt",
+        "checkpoints/checkpoint_step_002000.pt",
+        "/kaggle/working/tiny-gpt-500m/checkpoints/best_tinygpt_500m.pt",
+        "/kaggle/working/checkpoints/best_tinygpt_500m.pt",
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            print(f"Discovered base model at: {c}")
+            return c
+
+    # Recursively search Kaggle inputs if running on Kaggle
+    if os.path.exists("/kaggle/input"):
+        for root, _, files in os.walk("/kaggle/input"):
+            if "best_tinygpt_500m.pt" in files:
+                found = os.path.join(root, "best_tinygpt_500m.pt")
+                print(f"Auto-discovered base model in Kaggle input at: {found}")
+                return found
+
+    raise FileNotFoundError(
+        f"Base model checkpoint not found at '{path}'. "
+        "Please attach your trained notebook output (SmallLLM-500) as an Input on Kaggle, "
+        "or ensure best_tinygpt_500m.pt is present."
+    )
+
+
 def main():
     args = parse_args()
 
@@ -65,20 +99,22 @@ def main():
         sequence_length=config.get("sequence_length", 1024),
     )
 
-    # Load base model
-    if os.path.exists(args.base_model):
-        checkpoint = torch.load(
-            args.base_model, map_location="cpu", weights_only=False
-        )
-        model_config = TinyGPTConfig.from_dict(checkpoint.get("config", {}))
-        model = TinyGPT500M(model_config)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        print(f"Loaded base model weights from {args.base_model}")
+    # Load base model with strict verification and auto-discovery
+    base_model_path = resolve_base_model_path(args.base_model)
+    print(f"Loading base model weights from: {base_model_path}...")
+    checkpoint = torch.load(base_model_path, map_location="cpu", weights_only=False)
+
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        state_dict = checkpoint["model_state_dict"]
+        config_dict = checkpoint.get("config", {})
     else:
-        print(
-            f"Base model checkpoint {args.base_model} not found. Instantiating fresh 2-layer model for test..."
-        )
-        model = TinyGPT500M(TinyGPTConfig(num_hidden_layers=2))
+        state_dict = checkpoint
+        config_dict = {}
+
+    model_config = TinyGPTConfig.from_dict(config_dict) if config_dict else TinyGPTConfig()
+    model = TinyGPT500M(model_config)
+    model.load_state_dict(state_dict)
+    print(f"Successfully loaded {model.count_parameters():,} parameters into Usaid AI architecture!")
 
     trainer = SFTTrainer(model=model, train_dataset=dataset, config=config)
     trainer.train()
