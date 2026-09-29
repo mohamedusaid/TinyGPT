@@ -49,10 +49,11 @@ def start_chat_session(
                 sys.stdout.flush()
                 token_count[0] += 1
 
+            formatted_prompt = f"User: {prompt}\n\nAssistant: "
             full_text, reason = generate(
                 model=model,
                 tokenizer=tokenizer,
-                prompt=prompt,
+                prompt=formatted_prompt,
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
                 top_p=top_p,

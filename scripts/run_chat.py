@@ -126,12 +126,18 @@ def main():
     print(f"Usaid AI loaded successfully ({model.count_parameters():,} parameters) on {device} [{target_dtype}].")
 
     if args.prompt:
-        print(f"\nPrompt: {args.prompt}")
+        print(f"\nUser Query: {args.prompt}")
         print("Generating completion...\n")
+
+        if not args.prompt.startswith("User:") and "Assistant:" not in args.prompt:
+            prompt_to_feed = f"User: {args.prompt}\n\nAssistant: "
+        else:
+            prompt_to_feed = args.prompt
+
         full_text, reason = generate(
             model=model,
             tokenizer=tokenizer,
-            prompt=args.prompt,
+            prompt=prompt_to_feed,
             max_new_tokens=args.max_tokens,
             temperature=args.temperature,
             top_p=args.top_p,
