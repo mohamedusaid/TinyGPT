@@ -14,6 +14,8 @@ __pycache__/
 checkpoints/
 checkpoints_sft/
 exported_hf_model/
+exported_usaid_ai/
+exported_*/
 
 # Data directories
 data_shards/
