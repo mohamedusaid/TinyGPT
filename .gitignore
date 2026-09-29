@@ -13,6 +13,7 @@ __pycache__/
 # Checkpoint directories
 checkpoints/
 checkpoints_sft/
+sft_checkpoints/
 exported_hf_model/
 exported_usaid_ai/
 exported_*/

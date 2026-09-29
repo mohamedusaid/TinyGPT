@@ -78,7 +78,9 @@ def parse_args():
 def resolve_checkpoint(ckpt_arg: str | None) -> str:
     candidates = [
         ckpt_arg,
+        "sft_checkpoints/usaid_ai_500m.pt",
         "checkpoints/usaid_ai_500m.pt",
+        "checkpoints_sft/usaid_ai_500m.pt",
         "checkpoints/best_usaid_ai_500m.pt",
         "checkpoints/best_tinygpt_500m.pt",
     ]
@@ -86,7 +88,7 @@ def resolve_checkpoint(ckpt_arg: str | None) -> str:
         if c and os.path.exists(c):
             return c
     raise FileNotFoundError(
-        "Could not find any trained checkpoint! Please ensure 'checkpoints/usaid_ai_500m.pt' exists."
+        "Could not find any trained checkpoint! Please ensure 'sft_checkpoints/usaid_ai_500m.pt' exists."
     )
 
 

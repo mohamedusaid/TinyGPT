@@ -88,6 +88,9 @@ def main():
     checkpoint_to_load = args.checkpoint
     if not os.path.exists(checkpoint_to_load):
         candidates = [
+            "sft_checkpoints/usaid_ai_500m.pt",
+            "checkpoints_sft/usaid_ai_500m.pt",
+            "checkpoints/usaid_ai_500m.pt",
             "checkpoints/best_usaid_ai_500m.pt",
             "checkpoints/best_tinygpt_500m.pt",
         ]

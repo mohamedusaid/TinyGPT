@@ -82,7 +82,7 @@ def main():
     tokenizer = GPT2Tokenizer()
 
     base_ckpt = "checkpoints/best_tinygpt_500m.pt"
-    sft_ckpt = "checkpoints/usaid_ai_500m.pt"
+    sft_ckpt = "sft_checkpoints/usaid_ai_500m.pt" if os.path.exists("sft_checkpoints/usaid_ai_500m.pt") else "checkpoints/usaid_ai_500m.pt"
 
     print("Loading Pre-SFT Base Model...")
     base_model = load_model(base_ckpt, device)

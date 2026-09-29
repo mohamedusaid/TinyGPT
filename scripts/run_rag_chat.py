@@ -62,6 +62,8 @@ def parse_args():
 def resolve_checkpoint(ckpt_arg: str | None) -> str:
     candidates = [
         ckpt_arg,
+        "sft_checkpoints/usaid_ai_500m.pt",
+        "checkpoints_sft/usaid_ai_500m.pt",
         "checkpoints/usaid_ai_500m.pt",
         "checkpoints/best_usaid_ai_500m.pt",
         "checkpoints/best_tinygpt_500m.pt",
