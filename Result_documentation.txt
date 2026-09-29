@@ -641,3 +641,104 @@ Disk & Output Artifacts Produced:
   - Output Tab Preservation:              Artifacts permanently stored under Version 1 Output on Kaggle
 
 ================================================================================
+================================================================================
+16. BASE FOUNDATIONAL MODEL (PRE-SFT) EMPIRICAL INFERENCE & BEHAVIORAL AUDIT
+================================================================================
+Audit Date:             2026-09-29
+Tested Artifact:        checkpoints/best_tinygpt_500m.pt (Val Loss: 2.9091, PPL: 18.34)
+Model Scale:            500,136,960 Parameters (Untied Embeddings, GQA 4:1, SwiGLU, RMSNorm)
+Runtime Environment:    Local Host / CPU (PyTorch 2.14.0+cpu, torch.float32)
+Evaluation Purpose:     Establish baseline empirical generation benchmarks BEFORE Supervised
+                        Fine-Tuning (SFT) and Retrieval-Augmented Generation (RAG).
+
+Empirical Test Prompts & Raw Generations:
+
+[Test Sample 1: Identity Probe (Unsupervised Base Checkpoint)]
+  - Command:
+    python scripts/run_chat.py --checkpoint checkpoints/best_tinygpt_500m.pt --prompt "who are you?"
+  - Raw Model Output:
+    "Assistant: The internet is a vast and fascinating network of interconnected devices that allow us
+     to communicate, communicate, and connect with one another. It's a vast network of connected
+     networks that enable us to interact with one another and connect through the internet.
+     The internet is a network of interconnected networks that support communication, education,
+     and social justice. Each network consists of a network of interconnected computers that can
+     transmit information from one place to another, providing users with the necessary tools
+     to communicate, communicate"
+  - Behavioral Diagnosis:
+    * Syntactic Fluency: High. Grammatically sound English with smooth phrasing.
+    * Identity Status: UNALIGNED. Does not know it is "Usaid AI created by Mohamed Usaid".
+    * Completion Dynamic: Treated "who are you?" as a web forum / discussion starter,
+      drifting into general exposition on computer networks.
+
+[Test Sample 2: World Knowledge / Geography Fact Probe]
+  - Command:
+    python scripts/run_chat.py --checkpoint checkpoints/best_tinygpt_500m.pt --prompt "What is the capital of france?"
+  - Raw Model Output (Attempt A):
+    "- I am a student of high school, but I want to be sure that I am a teacher.
+     - I am not just a teacher but an instructor.
+     - I am a teacher and I will have my students go on to become teachers.
+     I will see you at the end of this page.
+     Please also check out our website for information about our work, including our website,
+     as well as your own.
+     - The website includes a number of resources:
+     - The"
+  - Raw Model Output (Attempt B, --max_tokens 35):
+    "Assistant: The capital of a city is a fascinating and intriguing place. The city is home
+     to a rich history, with its own unique culture, customs, and traditions"
+  - Behavioral Diagnosis:
+    * Next-Token Bias: In Attempt A, raw text completion mimicked an educational web forum / FAQ list.
+    * In Attempt B, it generated conversational filler about "The capital of a city is..." instead
+      of direct factual lookup ("Paris").
+    * Demonstrates that Base Models perform statistical continuation, not instruction following.
+
+[Test Sample 3: Code Synthesis Probe]
+  - Command:
+    python scripts/run_chat.py --checkpoint checkpoints/best_tinygpt_500m.pt --prompt "def fibonacci(n):" --max_tokens 35
+  - Raw Model Output:
+    "        return math.sqrt(1, n+2)
+     ```
+     In this function, we use the `factorial`"
+  - Behavioral Diagnosis:
+    * Python Syntax & Formatting: Correct indentation and immediate markdown code block closure (```).
+    * Pedagogical Structure: Immediately transitioned into docstring/explanatory prose ("In this function..."),
+      reflecting Cosmopedia-v2 and Python-Edu dataset structure.
+    * Algorithmic Soundness: Hallucinated mathematical function (`math.sqrt`), confirming the need
+      for SFT code alignment to reinforce strict algorithmic recursion and iteration.
+
+[Test Sample 4: Symbolic Arithmetic / Math Reasoning]
+  - Command:
+    python scripts/run_chat.py --checkpoint checkpoints/best_tinygpt_500m.pt --prompt "1+1=" --max_tokens 35
+  - Raw Model Output:
+    "2^(3-5) - 2^(-2-6)^(-2-6).
+     Assistant: To solve this problem, we can use the formula"
+  - Behavioral Diagnosis:
+    * Numerical Symbol Recognition: Recognized mathematical expression context.
+    * Continuation Behavior: Generated algebraic expression completion followed by an "Assistant:" prompt.
+    * Highlights tokenization of arithmetic formulas in raw text before instruction fine-tuning.
+
+[Test Sample 5: STEM & Historical Narrative Continuation]
+  - Command:
+    python scripts/run_chat.py --checkpoint checkpoints/best_tinygpt_500m.pt --prompt "The history of Math begins with" --max_tokens 35
+  - Raw Model Output:
+    " the "Garden of Math" in 1892.
+     The first school of mathematics was founded by Thomas Jefferson, who became a teacher
+     and then later was born. In 18"
+  - Behavioral Diagnosis:
+    * Fluency & Vocabulary: Coherent narrative prose structure and temporal sequencing.
+    * Factual Grounding: Factually confused / hallucinated ("Thomas Jefferson, who became a teacher and then later was born").
+    * Confirms necessity of RAG (Retrieval-Augmented Generation) for grounded STEM facts.
+
+================================================================================
+17. SCIENTIFIC COMPARISON MATRIX: PRE-SFT BASELINE VS POST-SFT & RAG TARGETS
+================================================================================
+Dimension               Pre-SFT Base Model (Current)          Post-SFT & RAG Target (Phase 3 & 4)
+------------------------------------------------------------------------------------------------------
+Core Objective          Next-token sequence continuation      Instruction execution & Q&A assistant
+Creator Identity        Undefined (Hallucinates web text)     Explicit: "Usaid AI created by Mohamed Usaid"
+Prompt "who are you?"   Exposition on internet/devices        "I am Usaid AI, a 500M parameter model..."
+Prompt "1+1="           Complex algebraic equation            "1 + 1 = 2"
+Prompt "Capital France" Rambling educational bullet list      "The capital of France is Paris."
+Code "def fibonacci"    math.sqrt hallucination + docs        Standard recursive / DP Python implementation
+Fact Grounding          Unconstrained hallucinations          Retriever-verified knowledge base grounding
+Chat Format             Free-form raw strings                 Standard ChatML (<|im_start|> ... <|im_end|>)
+================================================================================
