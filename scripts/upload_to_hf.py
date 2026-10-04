@@ -53,8 +53,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--repo_id",
         type=str,
-        default="mohamedusaid/UsaidAI-500M",
-        help="Hugging Face repository ID (e.g. mohamedusaid/UsaidAI-500M)",
+        default="Usaidddddddddddddd/UsaidAI-500M",
+        help="Hugging Face repository ID (e.g. Usaidddddddddddddd/UsaidAI-500M)",
     )
     parser.add_argument(
         "--local_folder",

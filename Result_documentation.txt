@@ -1164,7 +1164,8 @@ Key Empirical Findings & AI Behavioral Phenomena:
 24. HUGGING FACE TOKENIZER PACKAGING & MODEL CARD READINESS
 ===============================================================================
 Target Directory:           exported_usaid_ai_aligned/
-Artifacts Packaged:
+Live Hugging Face Hub URL:  https://huggingface.co/Usaidddddddddddddd/UsaidAI-500M
+Artifacts Packaged & Uploaded:
   1. model.safetensors:      1,000,304,688 bytes (1.00 GB FP16 zero-copy safe binary weights)
   2. config.json:            Llama/Qwen compatible causal LM architecture metadata (500M params, 30 layers, GQA 4:1)
   3. generation_config.json: Default autoregressive sampling parameters
@@ -1187,5 +1188,5 @@ Ecosystem Verification Test:
 6. Continuous Chat Loop:    Interactive multi-turn streaming console with buffer management (`scripts/run_chat_loop.py`).
 7. Formal Benchmarking:     40.0% Overall Zero-Shot Multi-Domain Accuracy (60.0% in ML & World Knowledge).
 8. Tokenizer & Model Card:  Full Hugging Face ecosystem packaging with AutoTokenizer and comprehensive README.md.
-9. Export:                  Standard Hugging Face safetensors format ready for deployment (`exported_usaid_ai_aligned/`).
+9. Published Model Hub:     Live at https://huggingface.co/Usaidddddddddddddd/UsaidAI-500M (FP16 Safetensors).
 ===============================================================================
