@@ -51,19 +51,51 @@ tags:
 - pretraining
 ---
 
-# TinyGPT-500M Private Training Archive
+# TinyGPT-500M Private Pretraining Archive
 
-This repository is a private cloud backup containing raw PyTorch pretraining checkpoints, optimizer states, and tokenized datasets for **TinyGPT-500M / Usaid AI (500M)** developed by **Mohamed Usaid**.
+This private repository is the cloud backup for raw PyTorch pretraining checkpoints, optimizer states, and tokenized datasets for **TinyGPT-500M / Usaid AI (500M)** developed by **Mohamed Usaid**.
 
 ---
 
-## Repository Contents
+## Pretraining Summary
 
-| File | Size | Description |
-|---|---|---|
-| `best_tinygpt_500m.pt` | ~1.86 GB | Best pretraining checkpoint (Step 1300, validation loss: 2.89) prior to Supervised Fine-Tuning. |
-| `checkpoint_step_002000.pt` | ~5.59 GB | Full pretraining state at step 2000 containing: model weights, AdamW optimizer states (momentum & variance buffers), cosine learning rate scheduler state, GradScaler state, and RNG seed. |
-| `data_shards_download.zip` | ~165 MB | 27 tokenized training shards + validation shard (~2.7B tokens) formatted for high-throughput memory-mapped loading. |
+| Metric | Value |
+|---|---|
+| **Total Pretraining Steps** | **2,000 steps** |
+| **Tokens Trained** | **131,072,000 tokens (~131M)** |
+| **Final Validation Loss** | **2.909** |
+| **Context Length** | 1,024 tokens (capable up to 2,048) |
+| **Architecture** | 30 Layers, 1024 Dim, GQA (16 Q / 4 KV heads), SwiGLU (3456 Dim), RoPE, RMSNorm |
+| **Parameters** | 500,136,960 |
+
+---
+
+## Repository Artifacts
+
+### 1. `checkpoint_step_002000.pt` (~5.59 GB)
+* **Type:** Full pretraining resumption checkpoint at **Step 2000** (131,072,000 tokens trained, validation loss: 2.909).
+* **Contents:**
+  * `model_state_dict`: Full model weights (FP32)
+  * `optimizer_state_dict`: Complete AdamW optimizer states (momentum & variance buffers)
+  * `scheduler_state_dict`: CosineAnnealingLR state
+  * `scaler_state_dict`: GradScaler mixed-precision state
+  * `rng`: Random state for deterministic continuation
+  * `config`: Model configuration dictionary
+
+### 2. `best_tinygpt_500m.pt` (~1.86 GB)
+* **Type:** Base pretraining model weights at **Step 2000** (validation loss: 2.909).
+* **Contents:** Created directly from `checkpoint_step_002000.pt` by extracting `model_state_dict` and `config`, stripped of optimizer buffers for standalone evaluation, export, or Supervised Fine-Tuning (SFT).
+
+### 3. `data_shards_download.zip` (~165.6 MB)
+* **Type:** The exact **131M-token pretraining dataset** tokenized into memory-mapped uint16 `.bin` binary shards (27 train shards + validation shards, 5M tokens per shard).
+* **Curated Data Sources:**
+  * **Cosmopedia-v2 (30.0%)** (`HuggingFaceTB/smollm-corpus`): Synthetic textbooks, STEM, academic concepts, world knowledge.
+  * **FineWeb-Edu-dedup (30.0%)** (`HuggingFaceTB/smollm-corpus`): Curated high-scoring educational web articles.
+  * **Python-Edu (10.0%)** (`HuggingFaceTB/smollm-corpus`): Pure Python code, algorithms, data structures.
+  * **Verified C / C++ Code (10.0%)** (`OpenHermes-100k` / `SmolTalk`): Memory management, pointers, structs, STL, algorithms.
+  * **Verified Java Code (10.0%)** (`OpenHermes-100k` / `SmolTalk`): Enterprise OOP, classes, interfaces, JVM design patterns.
+  * **Everyday Conversations (10.0%)** (`SmolTalk-All`): Multi-turn natural dialogue flow.
+* **Pipeline Filtering:** Heuristic length bounds (150-60,000 chars), repetitive line filtering (<55% repetition ratio), and normalized content hash deduplication.
 
 ---
 
@@ -74,9 +106,9 @@ import torch
 
 checkpoint = torch.load("checkpoint_step_002000.pt", map_location="cpu", weights_only=False)
 
-print("Resuming from Step:", checkpoint["step"])
-print("Tokens trained:", checkpoint["tokens_trained"])
-print("Val Loss at save:", checkpoint["val_loss"])
+print("Resuming Step:", checkpoint["step"])              # 2000
+print("Tokens Trained:", checkpoint["tokens_trained"])  # 131,072,000
+print("Validation Loss:", checkpoint["val_loss"])        # 2.909
 
 # Load into model & optimizer:
 model.load_state_dict(checkpoint["model_state_dict"])
