@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usaid AI · Embedding Projector</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--background, #0f1117); color: var(--foreground, #e6e9ef);
+         font-family: system-ui, "Segoe UI", Roboto, sans-serif; font-size: 13px; overflow: hidden; }
+  #app { display: flex; height: 100vh; }
+  #side { width: 310px; min-width: 310px; background: var(--card, #161a23);
+          border-right: 1px solid var(--border, #262c3a); overflow-y: auto; padding: 14px 14px 20px; }
+  #stage { flex: 1; position: relative; min-width: 0; background: var(--background, #0f1117); }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+  canvas.drag { cursor: grabbing; }
+  h1 { font-size: 15px; margin: 0 0 4px; font-weight: 650; }
+  h1 span { color: #ff8a3d; }
+  .muted { color: var(--muted-foreground, #8a93a6); }
+  .sub { font-size: 12px; line-height: 1.55; margin-bottom: 10px; }
+  .sec { border-top: 1px solid var(--border, #262c3a); padding: 11px 0; }
+  .sec h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 8px;
+            font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .seg { display: flex; gap: 4px; }
+  .seg button, .btn { flex: 1; background: transparent; border: 1px solid var(--border, #262c3a);
+                      color: inherit; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .seg button:hover, .btn:hover { border-color: #4fc3f7; }
+  .seg button.on { background: #ff8a3d; border-color: #ff8a3d; color: #111; font-weight: 600; }
+  .seg button:disabled { opacity: .35; cursor: not-allowed; }
+  .btn { flex: none; padding: 3px 9px; }
+  input[type=text] { width: 100%; background: transparent; border: 1px solid var(--border, #262c3a);
+                     color: inherit; padding: 7px 10px; border-radius: 6px; font-size: 13px; outline: none; }
+  input[type=text]:focus { border-color: #4fc3f7; }
+  input[type=range] { width: 100%; accent-color: #ff8a3d; }
+  label.chk { display: flex; align-items: center; gap: 8px; margin: 5px 0; cursor: pointer; font-size: 12.5px; }
+  .list { margin-top: 6px; max-height: 250px; overflow-y: auto; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 12.5px; }
+  .item:hover { background: rgba(127,127,127,.14); }
+  .item .n { flex: 0 0 18px; text-align: right; font-size: 12px; }
+  .item .tok { flex: 0 0 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Consolas, monospace; }
+  .item .barw { flex: 1; height: 6px; background: rgba(127,127,127,.18); border-radius: 3px; overflow: hidden; }
+  .item .barw div { height: 100%; background: linear-gradient(90deg, #4fc3f7, #ff8a3d); }
+  .item .val { flex: 0 0 42px; text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; }
+  #selTok { font-size: 21px; font-weight: 700; font-family: Consolas, monospace; color: #ff8a3d; word-break: break-all; }
+  .kv { font-size: 12px; margin-top: 3px; line-height: 1.5; }
+  .hint { font-size: 12px; line-height: 1.55; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 3px; vertical-align: -1px; }
+  #tip { position: absolute; pointer-events: none; background: var(--card, #1e2330); border: 1px solid #4fc3f7;
+         padding: 4px 8px; border-radius: 6px; font-family: Consolas, monospace; font-size: 12.5px; display: none;
+         white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+  .overlay { position: absolute; font-size: 12px; pointer-events: none; }
+  #help { left: 12px; bottom: 10px; }
+  #projTitle { right: 14px; top: 10px; text-align: right; font-weight: 600; }
+  #legend { right: 14px; bottom: 10px; text-align: right; }
+  @media (max-width: 760px) {
+    #app { flex-direction: column-reverse; }
+    #side { width: auto; min-width: 0; height: 44vh; border-right: none; border-top: 1px solid var(--border, #262c3a); }
+    #stage { flex: none; height: 56vh; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="side">
+    <h1>Usaid AI · <span>Embedding Projector</span></h1>
+    <div class="sub muted" id="metaLine"></div>
+
+    <div class="sec">
+      <h2>Projection</h2>
+      <div class="seg" id="projBtns"></div>
+      <div class="hint muted" id="projInfo" style="margin-top:7px"></div>
+      <div class="seg" style="margin-top:8px"><button id="d3" class="on">3D</button><button id="d2">2D</button></div>
+    </div>
+
+    <div class="sec">
+      <h2>Color by</h2>
+      <div class="seg"><button id="cCluster" class="on">Semantic cluster</button><button id="cFreq">Token frequency</button></div>
+    </div>
+
+    <div class="sec">
+      <h2>Search</h2>
+      <input type="text" id="search" placeholder="e.g. king, water, happy…" autocomplete="off">
+      <div class="list" id="matchList"></div>
+    </div>
+
+    <div class="sec">
+      <h2><span>Nearest neighbors</span><span class="muted" id="kVal"></span></h2>
+      <input type="range" id="kSlider" min="1" step="1">
+      <label class="chk"><input type="checkbox" id="labels" checked> Show labels</label>
+      <label class="chk"><input type="checkbox" id="isolate"> Isolate selection</label>
+      <label class="chk"><input type="checkbox" id="graph"> Draw 1-NN links for all tokens</label>
+      <label class="chk"><input type="checkbox" id="rotate"> Auto-rotate (3D)</label>
+    </div>
+
+    <div class="sec" id="selSec" style="display:none">
+      <h2><span>Selected</span><button class="btn" id="clearSel">Clear (Esc)</button></h2>
+      <div id="selTok"></div>
+      <div class="kv muted" id="selMeta"></div>
+      <div class="hint muted" style="margin-top:8px">Nearest tokens — cosine similarity in the original <b id="dimTxt"></b>-D space:</div>
+      <div class="list" id="nbList"></div>
+    </div>
+
+    <div class="sec hint muted">
+      Click a point to see its nearest neighbors. Lines connect it to tokens that are close in the
+      <i>full</i> embedding space — after projection a true neighbor can still look far away.
+    </div>
+  </div>
+
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="tip"></div>
+    <div class="overlay muted" id="projTitle"></div>
+    <div class="overlay muted" id="help">drag: rotate · right/shift-drag: pan · scroll: zoom · double-click: reset</div>
+    <div class="overlay muted" id="legend"></div>
+  </div>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const N = DATA.tokens.length;
+const KMAX = DATA.neighbors.length ? DATA.neighbors[0].length : 0;
+const PALETTE = ["#4fc3f7","#ff8a65","#9ccc65","#ba68c8","#ffca28","#26a69a","#f06292",
+                 "#7986cb","#ef5350","#66bb6a","#ffa726","#90a4ae","#9575cd","#d4e157","#42a5f5","#a1887f"];
+const NAMES = { pca: "PCA", tsne: "t-SNE", umap: "UMAP" };
+
+const S = { proj: DATA.default_proj, dim: 3, color: "cluster", k: Math.min(10, KMAX), sel: null, hover: null,
+            labels: true, isolate: false, graph: false, rotate: false, matches: [] };
+const cam = { yaw: 0.7, pitch: 0.35, zoom: 1, panX: 0, panY: 0 };
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const cv = $("cv"), ctx = cv.getContext("2d");
+let dpr = 1, dirty = true;
+
+/* ---------------- positions + smooth transitions ---------------- */
+function targetPositions() {
+  const P = DATA.proj[S.proj], a = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    a[3 * i] = P[i][0]; a[3 * i + 1] = P[i][1]; a[3 * i + 2] = S.dim === 3 ? P[i][2] : 0;
+  }
+  return a;
+}
+let cur = targetPositions(), from = cur, to = cur, animT0 = -1;
+const ANIM_MS = 750;
+function transition() { from = cur.slice(); to = targetPositions(); animT0 = performance.now(); dirty = true; }
+function stepAnim(now) {
+  if (animT0 < 0) return false;
+  let t = Math.min(1, (now - animT0) / ANIM_MS);
+  const e = t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  for (let i = 0; i < cur.length; i++) cur[i] = from[i] + (to[i] - from[i]) * e;
+  if (t >= 1) animT0 = -1;
+  return true;
+}
+
+/* ---------------- colors ---------------- */
+const VIRIDIS = [[68,1,84],[72,40,120],[62,74,137],[49,104,142],[38,130,142],[31,158,137],[53,183,121],[109,205,89],[180,222,44],[253,231,37]];
+function viridis(t) {
+  t = Math.max(0, Math.min(1, t)) * (VIRIDIS.length - 1);
+  const i = Math.floor(t), f = t - i, a = VIRIDIS[i], b = VIRIDIS[Math.min(i + 1, VIRIDIS.length - 1)];
+  return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(",")})`;
+}
+const logIds = DATA.ids.map(id => Math.log10(1 + id));
+const lmin = Math.min(...logIds), lmax = Math.max(...logIds);
+const FREQ_COLORS = logIds.map(v => viridis(1 - (v - lmin) / (lmax - lmin || 1)));
+const colorOf = i => S.color === "cluster" ? PALETTE[DATA.clusters[i] % PALETTE.length] : FREQ_COLORS[i];
+const isLight = () => document.documentElement.classList.contains("light") ||
+                      (getComputedStyle(document.body).color.match(/\d+/g) || [255]).slice(0, 3).reduce((a, b) => a + +b, 0) < 300;
+
+/* ---------------- projection to screen ---------------- */
+const sx = new Float32Array(N), sy = new Float32Array(N), sz = new Float32Array(N), ss = new Float32Array(N);
+const order = new Uint32Array(N).map((_, i) => i);
+function project() {
+  const W = cv.width, H = cv.height, cx = W / 2 + cam.panX * dpr, cy = H / 2 + cam.panY * dpr;
+  const base = Math.min(W, H) * 0.42 * cam.zoom, D = 3.4;
+  const cyw = Math.cos(cam.yaw), syw = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  for (let i = 0; i < N; i++) {
+    const x = cur[3 * i], y = cur[3 * i + 1], z = cur[3 * i + 2];
+    if (S.dim === 3) {
+      const x1 = x * cyw + z * syw, z1 = -x * syw + z * cyw;
+      const y1 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
+      const p = D / (D + z2);
+      sx[i] = cx + x1 * base * p; sy[i] = cy - y1 * base * p; sz[i] = z2; ss[i] = p;
+    } else {
+      sx[i] = cx + x * base; sy[i] = cy - y * base; sz[i] = 0; ss[i] = 1;
+    }
+  }
+  if (S.dim === 3) order.sort((a, b) => sz[b] - sz[a]);  // far -> near
+}
+
+/* ---------------- drawing ---------------- */
+function focusSet() {
+  if (S.sel === null) return null;
+  return new Set([S.sel, ...DATA.neighbors[S.sel].slice(0, S.k)]);
+}
+
+function drawLabel(i, text, color, bg, size, bold) {
+  ctx.font = `${bold ? "700 " : ""}${size * dpr}px Consolas, monospace`;
+  const w = ctx.measureText(text).width, h = size * dpr * 1.25;
+  const x = sx[i] - w / 2, y = sy[i] - (S.dim === 3 ? 7 * ss[i] : 7) * dpr - h;
+  if (bg) {
+    ctx.globalAlpha = 0.85; ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.roundRect(x - 4 * dpr, y, w + 8 * dpr, h, 4 * dpr); ctx.fill();
+  }
+  ctx.globalAlpha = 1; ctx.fillStyle = color; ctx.textBaseline = "top";
+  ctx.fillText(text, x, y + h * 0.1);
+  return [x - 4 * dpr, y, w + 8 * dpr, h];
+}
+
+function draw() {
+  project();
+  const W = cv.width, H = cv.height, light = isLight();
+  const fg = light ? "#1d2330" : "#e6e9ef", muted = light ? "#5c6577" : "#9aa3b5";
+  const pillBg = light ? "#ffffff" : "#161a23";
+  ctx.clearRect(0, 0, W, H);
+
+  const F = focusSet();
+  const visible = i => !(S.isolate && F && !F.has(i));
+  const dimmed = F !== null || S.matches.length > 0;
+  const matchSet = new Set(S.matches);
+  let zmin = Infinity, zmax = -Infinity;
+  if (S.dim === 3) for (let i = 0; i < N; i++) { if (sz[i] < zmin) zmin = sz[i]; if (sz[i] > zmax) zmax = sz[i]; }
+
+  // global 1-NN graph
+  if (S.graph) {
+    ctx.globalAlpha = light ? 0.25 : 0.22; ctx.strokeStyle = light ? "#5a6a90" : "#8ca0d2"; ctx.lineWidth = dpr;
+    ctx.beginPath();
+    for (let i = 0; i < N; i++) {
+      if (!visible(i)) continue;
+      const j = DATA.neighbors[i][0];
+      ctx.moveTo(sx[i], sy[i]); ctx.lineTo(sx[j], sy[j]);
+    }
+    ctx.stroke();
+  }
+
+  // base points
+  const ptR = Math.max(1.6, Math.min(4.5, 2.4 * Math.sqrt(cam.zoom)));
+  for (let n = 0; n < N; n++) {
+    const i = order[n];
+    if (!visible(i)) continue;
+    const depth = S.dim === 3 ? 1 - (sz[i] - zmin) / (zmax - zmin || 1) : 1;
+    ctx.globalAlpha = dimmed && !(F && F.has(i)) && !matchSet.has(i) ? 0.13 : 0.35 + 0.6 * depth;
+    ctx.fillStyle = colorOf(i);
+    ctx.beginPath(); ctx.arc(sx[i], sy[i], ptR * (S.dim === 3 ? ss[i] : 1) * dpr, 0, 6.2832); ctx.fill();
+  }
+
+  // selection edges + highlights
+  const placed = [];
+  if (S.sel !== null) {
+    const s = S.sel, nb = DATA.neighbors[s].slice(0, S.k), sims = DATA.sims[s];
+    const smax = sims[0] || 1;
+    nb.forEach((j, r) => {
+      ctx.globalAlpha = 0.35 + 0.6 * (sims[r] / smax); ctx.strokeStyle = "#4fc3f7"; ctx.lineWidth = 2 * dpr;
+      ctx.beginPath(); ctx.moveTo(sx[s], sy[s]); ctx.lineTo(sx[j], sy[j]); ctx.stroke();
+    });
+    nb.forEach(j => {
+      ctx.globalAlpha = 1; ctx.fillStyle = "#4fc3f7";
+      ctx.beginPath(); ctx.arc(sx[j], sy[j], 4.5 * dpr, 0, 6.2832); ctx.fill();
+    });
+  }
+  S.matches.forEach(i => {
+    if (!visible(i)) return;
+    ctx.globalAlpha = 1; ctx.fillStyle = "#ffca28";
+    ctx.beginPath(); ctx.arc(sx[i], sy[i], 4.5 * dpr, 0, 6.2832); ctx.fill();
+  });
+  if (S.sel !== null) {
+    const s = S.sel;
+    ctx.globalAlpha = 1; ctx.fillStyle = "#ff8a3d"; ctx.strokeStyle = light ? "#111" : "#fff"; ctx.lineWidth = 1.5 * dpr;
+    ctx.beginPath(); ctx.arc(sx[s], sy[s], 7.5 * dpr, 0, 6.2832); ctx.fill(); ctx.stroke();
+  }
+  if (S.hover !== null) {
+    const h = S.hover;
+    ctx.globalAlpha = 1; ctx.strokeStyle = light ? "#111" : "#fff"; ctx.lineWidth = 1.5 * dpr;
+    ctx.beginPath(); ctx.arc(sx[h], sy[h], 6 * dpr, 0, 6.2832); ctx.stroke();
+  }
+
+  // priority labels
+  if (S.sel !== null) {
+    placed.push(drawLabel(S.sel, DATA.labels[S.sel], "#ff8a3d", pillBg, 16, true));
+    DATA.neighbors[S.sel].slice(0, S.k).forEach(j => placed.push(drawLabel(j, DATA.labels[j], light ? "#0a6c96" : "#a9e3ff", pillBg, 13, false)));
+  }
+  S.matches.slice(0, 40).forEach(i => { if (visible(i)) placed.push(drawLabel(i, DATA.labels[i], light ? "#8a6100" : "#ffe082", pillBg, 12.5, false)); });
+
+  // background labels with collision avoidance (front-most first), like the TF projector
+  if (S.labels) {
+    const overlaps = r => placed.some(p => r[0] < p[0] + p[2] && r[0] + r[2] > p[0] && r[1] < p[1] + p[3] && r[1] + r[3] > p[1]);
+    ctx.font = `${12 * dpr}px Consolas, monospace`;
+    const budget = Math.round(70 + 90 * Math.min(cam.zoom, 4));
+    let drawn = 0;
+    for (let n = N - 1; n >= 0 && drawn < budget; n--) {
+      const i = S.dim === 3 ? order[n] : n;
+      if (!visible(i) || i === S.sel || (F && F.has(i)) || matchSet.has(i)) continue;
+      if (sx[i] < 0 || sy[i] < 0 || sx[i] > W || sy[i] > H) continue;
+      const t = DATA.labels[i], w = ctx.measureText(t).width, h = 12 * dpr * 1.25;
+      const r = [sx[i] - w / 2 - 2 * dpr, sy[i] - 5 * dpr - h, w + 4 * dpr, h];
+      if (overlaps(r)) continue;
+      placed.push(r);
+      ctx.globalAlpha = dimmed ? 0.25 : 0.85; ctx.fillStyle = muted; ctx.textBaseline = "top";
+      ctx.fillText(t, r[0] + 2 * dpr, r[1] + h * 0.1);
+      drawn++;
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ---------------- render loop ---------------- */
+function loop(now) {
+  const animating = stepAnim(now);
+  if (S.rotate && S.dim === 3) { cam.yaw += 0.004; dirty = true; }
+  if (dirty || animating) { draw(); dirty = false; }
+  requestAnimationFrame(loop);
+}
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  const r = cv.getBoundingClientRect();
+  cv.width = Math.max(1, Math.round(r.width * dpr)); cv.height = Math.max(1, Math.round(r.height * dpr));
+  dirty = true;
+}
+new ResizeObserver(resize).observe($("stage"));
+
+/* ---------------- interaction ---------------- */
+let drag = null;
+function pick(mx, my) {
+  const F = focusSet();
+  let best = null, bd = (12 * dpr) ** 2;
+  for (let i = 0; i < N; i++) {
+    if (S.isolate && F && !F.has(i)) continue;
+    const dx = sx[i] - mx * dpr, dy = sy[i] - my * dpr, d = dx * dx + dy * dy;
+    if (d < bd || (d === bd && best !== null && sz[i] < sz[best])) { bd = d; best = i; }
+  }
+  return best;
+}
+cv.addEventListener("contextmenu", e => e.preventDefault());
+cv.addEventListener("pointerdown", e => {
+  cv.setPointerCapture(e.pointerId);
+  drag = { x: e.offsetX, y: e.offsetY, moved: false, pan: e.button === 2 || e.shiftKey || S.dim === 2 };
+  cv.classList.add("drag");
+});
+cv.addEventListener("pointermove", e => {
+  if (drag) {
+    const dx = e.offsetX - drag.x, dy = e.offsetY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
+    if (drag.pan) { cam.panX += dx; cam.panY += dy; }
+    else { cam.yaw += dx * 0.008; cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch + dy * 0.008)); }
+    drag.x = e.offsetX; drag.y = e.offsetY; dirty = true;
+    $("tip").style.display = "none";
+    return;
+  }
+  const h = pick(e.offsetX, e.offsetY);
+  if (h !== S.hover) { S.hover = h; dirty = true; }
+  const tip = $("tip");
+  if (h === null) { tip.style.display = "none"; cv.style.cursor = "grab"; return; }
+  cv.style.cursor = "pointer";
+  tip.innerHTML = `<b>${esc(DATA.labels[h])}</b> <span class="muted">#${DATA.ids[h]}</span>`;
+  tip.style.display = "block";
+  tip.style.left = Math.min(e.offsetX + 14, cv.clientWidth - tip.offsetWidth - 6) + "px";
+  tip.style.top = (e.offsetY + 14) + "px";
+});
+cv.addEventListener("pointerup", e => {
+  if (drag && !drag.moved) { const h = pick(e.offsetX, e.offsetY); if (h !== null) select(h); }
+  drag = null; cv.classList.remove("drag");
+});
+cv.addEventListener("pointerleave", () => { S.hover = null; $("tip").style.display = "none"; dirty = true; });
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  const ratio = Math.exp(-e.deltaY * 0.0012), nz = Math.max(0.2, Math.min(30, cam.zoom * ratio)), rr = nz / cam.zoom;
+  const mx = e.offsetX - cv.clientWidth / 2, my = e.offsetY - cv.clientHeight / 2;
+  cam.panX = mx - (mx - cam.panX) * rr; cam.panY = my - (my - cam.panY) * rr; cam.zoom = nz; dirty = true;
+}, { passive: false });
+cv.addEventListener("dblclick", () => { Object.assign(cam, { yaw: 0.7, pitch: 0.35, zoom: 1, panX: 0, panY: 0 }); dirty = true; });
+
+/* ---------------- sidebar ---------------- */
+function itemHTML(i, n, val, vmax) {
+  return `<div class="item" data-i="${i}"><span class="n muted">${n}</span>
+    <span class="tok" title="${esc(DATA.labels[i])}">${esc(DATA.labels[i])}</span>
+    <span class="barw"><div style="width:${Math.max(0, val / (vmax || 1)) * 100}%"></div></span>
+    <span class="val muted">${val.toFixed(3)}</span></div>`;
+}
+function bindItems(el) { el.querySelectorAll(".item").forEach(x => x.onclick = () => select(+x.dataset.i)); }
+
+function renderSidebar() {
+  $("kVal").textContent = `k = ${S.k}`;
+  $("projInfo").innerHTML = (DATA.meta.methods[S.proj] || {}).note || "";
+  $("projTitle").textContent = `${NAMES[S.proj]} · ${S.dim}D`;
+  $("legend").innerHTML = S.color === "cluster" ? `${new Set(DATA.clusters).size} k-means clusters (cosine)` :
+    `<span class="swatch" style="background:${viridis(1)}"></span>frequent → rare<span class="swatch" style="background:${viridis(0)};margin-left:4px"></span>`;
+  const sec = $("selSec");
+  if (S.sel === null) { sec.style.display = "none"; return; }
+  sec.style.display = "";
+  const s = S.sel, nb = DATA.neighbors[s].slice(0, S.k), sims = DATA.sims[s];
+  $("selTok").textContent = DATA.labels[s];
+  $("selMeta").innerHTML = `token id <b>${DATA.ids[s]}</b> · raw <code>${esc(JSON.stringify(DATA.tokens[s]))}</code><br>cluster
+    <span class="swatch" style="background:${PALETTE[DATA.clusters[s] % PALETTE.length]}"></span>${DATA.clusters[s]}`;
+  $("nbList").innerHTML = nb.map((j, r) => itemHTML(j, r + 1, sims[r], sims[0])).join("");
+  bindItems($("nbList"));
+}
+function select(i) { S.sel = i; renderSidebar(); dirty = true; }
+
+function doSearch(q) {
+  q = q.trim().toLowerCase();
+  if (!q) { S.matches = []; $("matchList").innerHTML = ""; dirty = true; return; }
+  const hits = [];
+  for (let i = 0; i < N; i++) {
+    const l = DATA.labels[i].toLowerCase();
+    if (l.includes(q)) hits.push([l === q ? 0 : l.startsWith(q) ? 1 : 2, l.length, i]);
+  }
+  hits.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  S.matches = hits.slice(0, 40).map(h => h[2]);
+  $("matchList").innerHTML = S.matches.length
+    ? S.matches.map((i, r) => `<div class="item" data-i="${i}"><span class="n muted">${r + 1}</span>
+        <span class="tok">${esc(DATA.labels[i])}</span><span class="val muted" style="flex:1">#${DATA.ids[i]}</span></div>`).join("")
+    : `<div class="hint muted">"${esc(q)}" is not in the loaded set. Re-run the script with <code>--words ${esc(q)}</code></div>`;
+  bindItems($("matchList"));
+  dirty = true;
+}
+
+/* ---------------- controls ---------------- */
+function init() {
+  $("metaLine").innerHTML = `<b>${N.toLocaleString()}</b> tokens · <b>${DATA.meta.dim}</b>-D vectors from
+    <code>${esc(DATA.meta.source)}</code><br>${esc(DATA.meta.checkpoint)}<br>${esc(DATA.meta.generated)}`;
+  $("dimTxt").textContent = DATA.meta.dim;
+
+  const pb = $("projBtns");
+  for (const key of ["pca", "tsne", "umap"]) {
+    const b = document.createElement("button");
+    b.textContent = NAMES[key]; b.disabled = !DATA.proj[key];
+    if (!DATA.proj[key]) b.title = `Not computed — re-run with --methods ...,${key}`;
+    if (key === S.proj) b.classList.add("on");
+    b.onclick = () => { S.proj = key; pb.querySelectorAll("button").forEach(x => x.classList.remove("on"));
+                        b.classList.add("on"); transition(); renderSidebar(); };
+    pb.appendChild(b);
+  }
+  const pair = (a, b, fn) => [a, b].forEach(id => $(id).onclick = () => {
+    $(a).classList.toggle("on", id === a); $(b).classList.toggle("on", id === b); fn(id); renderSidebar(); dirty = true; });
+  pair("d3", "d2", id => { S.dim = id === "d3" ? 3 : 2; if (S.dim === 2) { cam.yaw = 0; cam.pitch = 0; } else { cam.yaw = 0.7; cam.pitch = 0.35; } transition(); });
+  pair("cCluster", "cFreq", id => S.color = id === "cCluster" ? "cluster" : "freq");
+
+  const ks = $("kSlider"); ks.max = KMAX; ks.value = S.k;
+  ks.oninput = () => { S.k = +ks.value; renderSidebar(); dirty = true; };
+  for (const id of ["labels", "isolate", "graph", "rotate"]) $(id).onchange = e => { S[id] = e.target.checked; dirty = true; };
+  $("clearSel").onclick = () => { S.sel = null; renderSidebar(); dirty = true; };
+
+  let t = null;
+  $("search").oninput = e => { clearTimeout(t); t = setTimeout(() => doSearch(e.target.value), 120); };
+  $("search").onkeydown = e => { if (e.key === "Enter" && S.matches.length) select(S.matches[0]); };
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") { S.sel = null; S.matches = []; $("search").value = ""; $("matchList").innerHTML = ""; renderSidebar(); dirty = true; }
+  });
+  new MutationObserver(() => dirty = true).observe(document.documentElement, { attributes: true });
+
+  renderSidebar();
+  resize();
+  requestAnimationFrame(loop);
+}
+init();
+</script>
+</body>
+</html>
