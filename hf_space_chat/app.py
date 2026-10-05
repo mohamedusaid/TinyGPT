@@ -26,33 +26,68 @@ model.eval()
 print("Model loaded successfully!")
 
 
+def extract_text(content):
+    """Safely extracts plain string text from any Gradio content representation."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item.strip())
+            elif isinstance(item, dict):
+                text_val = item.get("text", "")
+                if text_val:
+                    parts.append(str(text_val).strip())
+                elif "content" in item:
+                    parts.append(str(item["content"]).strip())
+            else:
+                parts.append(str(item).strip())
+        return " ".join([p for p in parts if p]).strip()
+    if isinstance(content, dict):
+        return str(content.get("text", content.get("content", ""))).strip()
+    return str(content).strip() if content is not None else ""
+
+
 def build_prompt(message, history, system_prompt):
     prompt = ""
-    if system_prompt and system_prompt.strip():
+    if system_prompt and isinstance(system_prompt, str) and system_prompt.strip():
         prompt += f"System: {system_prompt.strip()}\n\n"
 
-    for turn in history:
+    for turn in history or []:
+        role = ""
+        raw_content = ""
         if isinstance(turn, dict):
             role = turn.get("role", "")
-            content = turn.get("content", "").strip()
-            if role == "user":
-                prompt += f"User: {content}\n\n"
-            elif role == "assistant":
-                prompt += f"Assistant: {content}\n\n"
+            raw_content = turn.get("content", "")
+        elif hasattr(turn, "role") and hasattr(turn, "content"):
+            role = turn.role
+            raw_content = turn.content
         elif isinstance(turn, (list, tuple)) and len(turn) == 2:
             u, a = turn
             if u:
-                prompt += f"User: {str(u).strip()}\n\n"
+                u_text = extract_text(u)
+                if u_text:
+                    prompt += f"User: {u_text}\n\n"
             if a:
-                prompt += f"Assistant: {str(a).strip()}\n\n"
+                a_text = extract_text(a)
+                if a_text:
+                    prompt += f"Assistant: {a_text}\n\n"
+            continue
 
-    prompt += f"User: {message.strip()}\n\nAssistant:"
+        role_str = "User" if str(role).lower() == "user" else "Assistant"
+        content_text = extract_text(raw_content)
+        if content_text:
+            prompt += f"{role_str}: {content_text}\n\n"
+
+    user_msg = extract_text(message)
+    prompt += f"User: {user_msg}\n\nAssistant:"
     return prompt
 
 
 @gpu_decorator
 def predict(
-    message: str,
+    message,
     history: list,
     system_prompt: str,
     temperature: float,
@@ -60,11 +95,12 @@ def predict(
     max_new_tokens: int,
     repetition_penalty: float,
 ):
-    if not message or not message.strip():
+    user_msg = extract_text(message)
+    if not user_msg:
         yield ""
         return
 
-    full_prompt = build_prompt(message, history, system_prompt)
+    full_prompt = build_prompt(user_msg, history, system_prompt)
     inputs = tokenizer(full_prompt, return_tensors="pt").to(model.device)
 
     streamer = TextIteratorStreamer(
