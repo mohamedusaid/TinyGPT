@@ -52,7 +52,7 @@ def extract_text(content):
 def build_prompt(message, history, system_prompt):
     prompt = ""
     if system_prompt and isinstance(system_prompt, str) and system_prompt.strip():
-        prompt += f"System: {system_prompt.strip()}\n\n"
+        prompt += f"{system_prompt.strip()}\n\n"
 
     for turn in history or []:
         role = ""
@@ -60,9 +60,23 @@ def build_prompt(message, history, system_prompt):
         if isinstance(turn, dict):
             role = turn.get("role", "")
             raw_content = turn.get("content", "")
+            role_str = "User" if str(role).lower() == "user" else "Assistant"
+            content_text = extract_text(raw_content)
+            if content_text:
+                if role_str == "Assistant":
+                    prompt += f"Assistant: {content_text}<|endoftext|>\n\n"
+                else:
+                    prompt += f"User: {content_text}\n\n"
+            continue
         elif hasattr(turn, "role") and hasattr(turn, "content"):
-            role = turn.role
-            raw_content = turn.content
+            role_str = "User" if str(turn.role).lower() == "user" else "Assistant"
+            content_text = extract_text(turn.content)
+            if content_text:
+                if role_str == "Assistant":
+                    prompt += f"Assistant: {content_text}<|endoftext|>\n\n"
+                else:
+                    prompt += f"User: {content_text}\n\n"
+            continue
         elif isinstance(turn, (list, tuple)) and len(turn) == 2:
             u, a = turn
             if u:
@@ -72,13 +86,16 @@ def build_prompt(message, history, system_prompt):
             if a:
                 a_text = extract_text(a)
                 if a_text:
-                    prompt += f"Assistant: {a_text}\n\n"
+                    prompt += f"Assistant: {a_text}<|endoftext|>\n\n"
             continue
 
         role_str = "User" if str(role).lower() == "user" else "Assistant"
         content_text = extract_text(raw_content)
         if content_text:
-            prompt += f"{role_str}: {content_text}\n\n"
+            if role_str == "Assistant":
+                prompt += f"Assistant: {content_text}<|endoftext|>\n\n"
+            else:
+                prompt += f"User: {content_text}\n\n"
 
     user_msg = extract_text(message)
     prompt += f"User: {user_msg}\n\nAssistant:"
@@ -155,17 +172,18 @@ DESCRIPTION_HTML = """
 
 additional_inputs = [
     gr.Textbox(
-        value="You are Usaid AI, a helpful, honest, and knowledgeable AI assistant created by Mohamed Usaid.",
-        label="System Prompt",
+        value="",
+        label="System Prompt (Optional)",
+        placeholder="Leave blank to use model's native identity. SFT model was trained with direct User/Assistant prompts.",
         lines=2,
     ),
     gr.Slider(
         minimum=0.0,
         maximum=1.5,
-        value=0.7,
+        value=0.6,
         step=0.05,
         label="Temperature",
-        info="Lower values are deterministic; higher values are creative.",
+        info="Default 0.6 matches SFT training evaluation. Lower values are more deterministic.",
     ),
     gr.Slider(
         minimum=0.1,
@@ -196,11 +214,11 @@ demo = gr.ChatInterface(
     title="🚀 Usaid AI (500M) — Interactive Chat & Code Assistant",
     description=DESCRIPTION_HTML,
     examples=[
+        ["Who are you?"],
         ["Who created you and what is your architecture?"],
         ["Write a Python function to compute the Fibonacci sequence with memoization."],
         ["Write a C function to reverse an integer array in-place."],
         ["Explain the difference between Multi-Head Attention and Grouped-Query Attention."],
-        ["What chemical element has the symbol O on the periodic table?"],
     ],
 )
 
