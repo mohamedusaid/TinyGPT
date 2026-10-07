@@ -1,8 +1,8 @@
-# ✨ Usaid AI (TinyGPT-500M)
+# ✨ Usaid AI (TinyGPT-500M) (Experimental)
 
 <div align="center">
 
-**A 500M Parameter Causal Language Model Architected, Pretrained & SFT Aligned from Scratch**  
+**An Experimental 500M Parameter Causal Language Model Architected, Pretrained & SFT Aligned from Scratch**  
 *Engineered by **Mohamed Usaid***
 
 [![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-UsaidAI--500M-blue.svg)](https://huggingface.co/Usaidddddddddddddd/UsaidAI-500M)
