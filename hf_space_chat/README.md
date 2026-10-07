@@ -1,6 +1,6 @@
 ---
 title: UsaidAI 500M Chat
-emoji: 🚀
+emoji: ✨
 colorFrom: blue
 colorTo: indigo
 sdk: gradio
@@ -12,7 +12,7 @@ license: mit
 short_description: Interactive chat demo for Usaid AI (500M) causal lm
 ---
 
-# 🚀 Usaid AI (500M) — Interactive Chat & Code Assistant
+# ✨ Usaid AI (500M) — Interactive Chat & Code Assistant
 
 Welcome to the live interactive Hugging Face Space for **Usaid AI (500M)**, created and engineered by **Mohamed Usaid**.
 

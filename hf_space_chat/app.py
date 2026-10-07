@@ -211,7 +211,7 @@ additional_inputs = [
 demo = gr.ChatInterface(
     fn=predict,
     additional_inputs=additional_inputs,
-    title="🚀 Usaid AI (500M) — Interactive Chat & Code Assistant",
+    title="✨ Usaid AI (500M) — Interactive Chat & Code Assistant",
     description=DESCRIPTION_HTML,
     examples=[
         ["Who are you?"],
