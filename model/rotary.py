@@ -1,7 +1,7 @@
 """
 Rotary Position Embedding (RoPE).
 Proposed by Su et al. (2021), "RoFormer: Enhanced Transformer with Rotary Position Embedding".
-Used in LLaMA, Mistral, Qwen, Gemma, and modern MNC architectures.
+Used in modern dense causal language model architectures.
 
 RoPE encodes relative token positions directly into the attention query and key vectors
 via complex number rotation:

@@ -1,6 +1,6 @@
 """
 Root Mean Square Normalization (RMSNorm).
-Proposed by Zhang and Sennrich (2019). Used in LLaMA, Mistral, Qwen, and SmolLM.
+Proposed by Zhang and Sennrich (2019). Modern zero-mean bias-free normalization layer.
 
 Unlike LayerNorm, RMSNorm does not shift activations by their mean and has no bias vector:
     y = (x / RMS(x)) * gamma

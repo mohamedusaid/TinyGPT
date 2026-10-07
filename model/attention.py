@@ -1,7 +1,7 @@
 """
 Grouped-Query Attention (GQA) with PyTorch Scaled Dot-Product Attention (SDPA).
 Proposed by Ainslie et al. (2023), "GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints".
-Used in LLaMA 3, Mistral, Gemma 2, and Qwen 2.5.
+Standard in modern frontier dense causal language models.
 
 Allows multiple Query heads to share a single Key/Value head (e.g. 16 Q heads share 4 KV heads = 4:1 ratio).
 This saves 75% of KV cache memory and memory-bandwidth during autoregressive inference decoding.

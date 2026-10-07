@@ -78,14 +78,14 @@ TOTAL ACTUAL PARAMETERS:                  500,136,960 (100.00%)
 
 ---
 
-## 2. Note on Hugging Face Ecosystem Compatibility
+## 2. Open Ecosystem Interoperability
 
 > [!NOTE]
-> **Independent Custom Architecture**: This model was written, pretrained, and aligned from scratch by **Mohamed Usaid** using pure PyTorch (`model/transformer.py`).
+> **Independent Custom Architecture**: This model was designed, coded, pretrained, and aligned completely from scratch by **Mohamed Usaid** using pure PyTorch (`model/transformer.py`).
 >
-> When exporting the model weights to the Hugging Face `transformers` format (`export/export_hf.py`), the model metadata in `config.json` is set to standard `"architectures": ["LlamaForCausalLM"]`.
-> 
-> **Why?** Modern frontier architectures (RoPE, GQA, SwiGLU, RMSNorm without bias) share the exact structural tensor layout of the open LLaMA format. Utilizing this standard specification allows **Usaid AI (500M)** to be loaded directly by any library in the AI ecosystem—including Hugging Face `AutoModelForCausalLM`, vLLM, Ollama, Gradio ZeroGPU, and TGI—out-of-the-box without requiring custom untrusted scripts (`trust_remote_code=True`).
+> **Standard SafeTensors Export**: To enable seamless plug-and-play compatibility across the AI ecosystem without forcing users to run arbitrary untrusted custom Python scripts (`trust_remote_code=True`), the model weights are exported in open-standard Half-Precision SafeTensors conforming to modern dense causal language model specifications (RoPE, GQA, SwiGLU, RMSNorm).
+>
+> This enables **Usaid AI (500M)** to run out-of-the-box across Hugging Face `AutoModelForCausalLM`, vLLM, Ollama, and Gradio ZeroGPU with zero friction.
 
 ---
 

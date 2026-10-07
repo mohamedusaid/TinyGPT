@@ -91,7 +91,7 @@ class TinyGPT500M(nn.Module):
         # Weight initialization
         self.apply(self._init_weights)
 
-        # Scale residual projections for deep networks (GPT-2 / LLaMA standard):
+        # Scale residual projections for deep networks:
         # Scale by 1 / sqrt(2 * num_layers) to prevent activation growth
         residual_scale = 1.0 / math.sqrt(2 * config.num_hidden_layers)
         for name, param in self.named_parameters():

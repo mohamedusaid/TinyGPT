@@ -70,7 +70,7 @@ BENCHMARK_CATEGORIES = {
             "answer_idx": 0,
         },
         {
-            "prompt": "Question: Which normalization layer replaces LayerNorm in modern LLMs like Llama and Usaid AI?",
+            "prompt": "Question: Which normalization layer replaces LayerNorm in modern frontier LLMs like Usaid AI?",
             "choices": ["BatchNorm", "RMSNorm", "InstanceNorm", "WeightNorm"],
             "answer_idx": 1,
         },

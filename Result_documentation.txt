@@ -531,7 +531,7 @@ Branch:  scaling-up-500m
 6. Industry-Standard Safetensors & Hugging Face Export:
    - Exporter tool: `export/export_hf.py` converts .pt checkpoints to standard Hugging Face format:
      * `model.safetensors` (1.0 GB half-precision safe zero-copy tensor storage)
-     * `config.json` (Llama/Qwen compatible causal LM architecture metadata)
+     * `config.json` (Standard dense causal LM architecture metadata)
      * `generation_config.json` (sampling parameters)
    - Direct loading: Fully compatible with `AutoModelForCausalLM.from_pretrained("exported_usaid_ai")`.
 
@@ -969,7 +969,7 @@ Export Script:              export/export_hf.py --checkpoint checkpoints/usaid_a
 Output Directory:           exported_usaid_ai_aligned/
 Generated Artifacts:
   - model.safetensors:      1,000,304,688 bytes (1.00 GB FP16 zero-copy safe binary weights)
-  - config.json:            Llama/Qwen compatible causal LM architecture metadata (500M params, 30 layers, GQA 4:1)
+  - config.json:            Standard dense causal LM architecture metadata (500M params, 30 layers, GQA 4:1)
   - generation_config.json: Default autoregressive sampling parameters
 Ecosystem Compatibility:    AutoModelForCausalLM.from_pretrained("exported_usaid_ai_aligned")
 
@@ -994,7 +994,7 @@ Detailed Diagnostic Breakdown:
       - The model possesses strong grammar, syntax, and keyword memory, but shallow logical deduction.
    b. SFT Dataset Scale & Domain Distribution:
       - SFT 1.0 used 4,731 samples (14.5 minutes of training), dominated by general conversational dialogue.
-      - Production code models (e.g. CodeLlama, Magicoder, DeepSeek-Coder) utilize 20,000 to 100,000+ specialized
+      - Production code models (e.g. Code models, Magicoder, DeepSeek-Coder) utilize 20,000 to 100,000+ specialized
         code instruction pairs (e.g. CodeAlpaca, Evol-Instruct-Code).
 
 3. The Path Forward (SFT 2.0 Roadmap):
@@ -1079,7 +1079,7 @@ Complete Question-by-Question Diagnostic Audit (All 20 Items):
       Ground Truth: Rotary Position Embedding
       Pre-SFT: 'Rotary Position Embedding' [CORRECT] | Post-SFT: 'Rotary Position Embedding' [CORRECT] | Delta: MAINTAINED (O)
 
-[Q08] ML: Which normalization layer replaces LayerNorm in modern LLMs like Llama and Usaid AI?
+[Q08] ML: Which normalization layer replaces LayerNorm in modern frontier LLMs like Usaid AI?
       Choices: ['BatchNorm', 'RMSNorm', 'InstanceNorm', 'WeightNorm']
       Ground Truth: RMSNorm
       Pre-SFT: 'BatchNorm' [WRONG] | Post-SFT: 'BatchNorm' [WRONG] | Delta: UNRESOLVED
@@ -1167,7 +1167,7 @@ Target Directory:           exported_usaid_ai_aligned/
 Live Hugging Face Hub URL:  https://huggingface.co/Usaidddddddddddddd/UsaidAI-500M
 Artifacts Packaged & Uploaded:
   1. model.safetensors:      1,000,304,688 bytes (1.00 GB FP16 zero-copy safe binary weights)
-  2. config.json:            Llama/Qwen compatible causal LM architecture metadata (500M params, 30 layers, GQA 4:1)
+  2. config.json:            Standard dense causal LM architecture metadata (500M params, 30 layers, GQA 4:1)
   3. generation_config.json: Default autoregressive sampling parameters
   4. tokenizer.json:         3,557,680 bytes (Fast BPE tokenizer with 50,257 vocab tokens)
   5. tokenizer_config.json:  328 bytes (Special tokens map: bos/eos/pad=<|endoftext|>)

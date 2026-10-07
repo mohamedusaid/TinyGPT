@@ -19,7 +19,7 @@ except ImportError:
 
 def convert_state_dict_to_hf(state_dict: dict) -> dict:
     """
-    Maps TinyGPT-500M internal parameter names to Hugging Face Llama/Qwen architecture format.
+    Maps TinyGPT-500M internal parameter names to standard Hugging Face causal LM format.
     """
     hf_state_dict = {}
 

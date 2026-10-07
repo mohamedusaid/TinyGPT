@@ -1,7 +1,7 @@
 """
 SwiGLU (Swish Gated Linear Unit) Feed-Forward Network.
 Proposed by Shazeer (2020), "GLU Variants Improve Transformer".
-Used in LLaMA, Mistral, Qwen, and Gemma.
+Standard in modern frontier dense causal language models.
 
 Replaces standard 2-layer GELU MLP with a 3-matrix gated formulation:
     SwiGLU(x) = (SiLU(W_gate * x) * (W_up * x)) * W_down
