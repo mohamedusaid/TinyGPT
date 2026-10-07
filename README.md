@@ -408,7 +408,28 @@ tiny-gpt-500m/
 
 ---
 
-## 6. Author & Citation
+## 6. Research Artifacts & Collaboration Opportunities
+
+To support ongoing academic exploration, scaling-law analysis, and open-source mechanistic interpretability, intermediate training artifacts are preserved:
+
+1. **`best_tinygpt_500m.pt` (1.86 GB)**:
+   - Foundational base model checkpoint at optimal pretraining validation loss (`2.9091` / PPL `18.34`) prior to SFT.
+   - Ideal for studying raw causal language modeling entropy, base representations, and custom alignment experimentation (e.g. DPO, PPO, or specialized SFT).
+2. **`checkpoint_step_002000.pt` (5.59 GB)**:
+   - Full step 2,000 training state containing master weights, AdamW optimizer moments, scheduler states, and RNG seeds for pretraining resumption.
+3. **`data_shards` (~131M Tokens)**:
+   - Pre-tokenized, memory-mapped binary uint16 dataset shards (FineWeb-Edu, Cosmopedia-v2 synthetic textbooks, multi-language code) ready for distributed streaming.
+
+### 🤝 Connect & Collaborate
+If you are an academic researcher, AI engineer, or student interested in exploring these artifacts, investigating mechanistic interpretability on 500M-scale GQA/RoPE architectures, or collaborating on compute-efficient scaling research:
+
+* **Open a Discussion:** Connect via [GitHub Issues / Discussions](https://github.com/mohamedusaid/TinyGPT/issues) or [Hugging Face Community](https://huggingface.co/Usaidddddddddddddd/UsaidAI-500M/discussions).
+* **GitHub Profile:** [@mohamedusaid](https://github.com/mohamedusaid)
+* **Archive Repository:** [Usaidddddddddddddd/TinyGPT-500M-Archive](https://huggingface.co/Usaidddddddddddddd/TinyGPT-500M-Archive)
+
+---
+
+## 7. Author & Citation
 
 **Architected and Built by:** Mohamed Usaid  
 - GitHub: [@mohamedusaid](https://github.com/mohamedusaid)  
