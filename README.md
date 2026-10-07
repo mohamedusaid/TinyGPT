@@ -1,4 +1,4 @@
-# 🚀 Usaid AI (TinyGPT-500M)
+# ✨ Usaid AI (TinyGPT-500M)
 
 <div align="center">
 
@@ -25,10 +25,10 @@
 Scaling from foundational 6.8M and 15.3M prototypes, this 500M system incorporates modern architectural innovations:
 - **Rotary Position Embeddings (RoPE)** for relative position-aware attention without static parameter bloat.
 - **Grouped-Query Attention (GQA)** with a 4:1 query-to-KV head ratio for high-throughput, memory-efficient KV-caching.
-- **SwiGLU Activation Function** in a 3-matrix Feed-Forward Network ($d_{ff} = 3,456$).
+- **SwiGLU Activation Function** in a 3-matrix Feed-Forward Network (d_ff = 3,456).
 - **RMSNorm Pre-Normalization** with zero-mean centering and no bias terms for numerical gradient stability.
 - **PyTorch Native Scaled Dot-Product Attention (SDPA)** leveraging FlashAttention/Memory-Efficient kernels.
-- **Supervised Fine-Tuning (SFT)** with prompt loss masking ($-100$) for conversational identity, docstrings, and multi-language code generation.
+- **Supervised Fine-Tuning (SFT)** with prompt loss masking (-100) for conversational identity, docstrings, and multi-language code generation.
 - **Retrieval-Augmented Generation (RAG)** grounding engine using BM25 semantic retrieval over custom knowledge documents.
 - **Interactive Interpretability Suite**: Step-by-step top-5 token probability branch explorer and 3D/2D embedding projector.
 
@@ -38,17 +38,17 @@ Scaling from foundational 6.8M and 15.3M prototypes, this 500M system incorporat
 
 | Hyperparameter | Value | Description |
 | :--- | :--- | :--- |
-| **Target Parameters** | **$500,000,000$** | Architecture scale goal |
-| **Actual Parameters** | **`500,136,960`** | Exact parameter count (**$+0.027\%$ delta**) |
-| **Vocabulary Size ($V$)** | **`50,257`** | Byte-Pair Encoding (`tiktoken` / GPT-2 standard) |
-| **Hidden Size ($d_{\text{model}}$)** | **`1,024`** | Power-of-2 dimension ($2^{10}$) for optimal Tensor Core tiling |
-| **Transformer Layers ($L$)** | **`30`** | Deep hierarchical reasoning depth |
-| **Query Attention Heads ($H_q$)** | **`16`** | Head dimension $d_{\text{head}} = 64$ ($16 \times 64 = 1,024$) |
-| **Key/Value Heads ($H_{kv}$)** | **`4`** | **Grouped-Query Attention (GQA 4:1 ratio)** |
-| **Intermediate Size ($d_{ff}$)** | **`3,456`** | **SwiGLU** 3-matrix FFN ($27 \times 128 = 3,456 \approx 3.375 \times d_{\text{model}}$) |
-| **Positional Encoding** | **RoPE** | Rotary Position Embeddings ($\theta = 10,000$, 0 static parameters) |
-| **Normalization** | **RMSNorm** | Pre-norm with learnable scale $\gamma$ (zero-mean, no bias parameters) |
-| **LM Head Tying** | **False** | Untied weights ($51.46\text{M}$ input embeddings + $51.46\text{M}$ output LM head) |
+| **Target Parameters** | **500,000,000** | Architecture scale goal |
+| **Actual Parameters** | **`500,136,960`** | Exact parameter count (**+0.027% delta**) |
+| **Vocabulary Size (V)** | **`50,257`** | Byte-Pair Encoding (`tiktoken` / GPT-2 standard) |
+| **Hidden Size (d_model)** | **`1,024`** | Power-of-2 dimension (2^10 = 1024) for optimal Tensor Core tiling |
+| **Transformer Layers (L)** | **`30`** | Deep hierarchical reasoning depth |
+| **Query Attention Heads (H_q)** | **`16`** | Head dimension d_head = 64 (16 x 64 = 1024) |
+| **Key/Value Heads (H_kv)** | **`4`** | **Grouped-Query Attention (GQA 4:1 ratio)** |
+| **Intermediate Size (d_ff)** | **`3,456`** | **SwiGLU** 3-matrix FFN (27 x 128 = 3,456 ~ 3.375 x d_model) |
+| **Positional Encoding** | **RoPE** | Rotary Position Embeddings (theta = 10,000, 0 static parameters) |
+| **Normalization** | **RMSNorm** | Pre-norm with learnable scale gamma (zero-mean, no bias parameters) |
+| **LM Head Tying** | **False** | Untied weights (51.46M input embeddings + 51.46M output LM head) |
 | **Attention Kernel** | **SDPA** | PyTorch native `scaled_dot_product_attention` |
 | **Context Length** | **`1,024`** | Native training context length (extensible to `2,048`) |
 
@@ -92,14 +92,14 @@ TOTAL ACTUAL PARAMETERS:                  500,136,960 (100.00%)
 ## 3. Empirical Training & Convergence Results
 
 ### Pretraining Phase (Foundational Base Model)
-- **Hardware**: Dual Cloud GPUs ($2 \times 16\text{ GB}$ NVIDIA Tesla T4, $32\text{ GB}$ GDDR6 total)
+- **Hardware**: Dual Cloud GPUs (2 x 16 GB NVIDIA Tesla T4, 32 GB GDDR6 total)
 - **Distributed Strategy**: PyTorch DistributedDataParallel (DDP, `torchrun`, `world_size=2`)
-- **Optimizer**: CUDA Fused AdamW ($\beta_1=0.9, \beta_2=0.95$, weight decay $0.1$ with 1D bias/norm exclusion)
-- **Learning Rate Schedule**: Cosine Annealing with Linear Warmup ($1.0 \times 10^{-6} \to 3.0 \times 10^{-4} \to 3.0 \times 10^{-5}$)
-- **Batch Geometry**: Micro-batch $2 \times$ Grad Accum $16 \times 1024$ seq len $\times 2$ GPUs = **$65,536\text{ tokens / step}$**
-- **Tokens Ingested**: **$131,072,000$ tokens** (~131.07 Million tokens across 2,000 steps)
+- **Optimizer**: CUDA Fused AdamW (beta1=0.9, beta2=0.95, weight decay 0.1 with 1D bias/norm exclusion)
+- **Learning Rate Schedule**: Cosine Annealing with Linear Warmup (1e-6 -> 3e-4 -> 3e-5)
+- **Batch Geometry**: Micro-batch 2 x Grad Accum 16 x 1024 seq len x 2 GPUs = **65,536 tokens / step**
+- **Tokens Ingested**: **131,072,000 tokens** (~131.07 Million tokens across 2,000 steps)
 - **Loss Progression**:
-  - Step 0: Initial loss $> 10.5$ (random initialization)
+  - Step 0: Initial loss > 10.5 (random initialization)
   - Step 800 (40%): Train Loss: `3.6849` | Val Loss: `3.5274` | Val PPL: `34.04`
   - Step 1600 (80%): Train Loss: `3.1250` | Val Loss: `3.0410` | Val PPL: `20.93`
   - **Step 2000 (100%)**: Train Loss: `2.9623` | **Val Loss: `2.9091`** | **Val PPL: `18.34`**
@@ -107,8 +107,8 @@ TOTAL ACTUAL PARAMETERS:                  500,136,960 (100.00%)
 
 ### Supervised Fine-Tuning Phase (SFT Alignment)
 - **Base Model**: `checkpoints/best_tinygpt_500m.pt`
-- **Dataset**: `data/sft_instructions.jsonl` ($4,731$ curated instruction-response pairs)
-- **Tokens Backpropagated**: $\approx 28.9\text{ Million tokens}$ across 3 epochs (441 optimizer steps)
+- **Dataset**: `data/sft_instructions.jsonl` (4,731 curated instruction-response pairs)
+- **Tokens Backpropagated**: ~28.9 Million tokens across 3 epochs (441 optimizer steps)
 - **Supervision Technique**: Strict **Prompt Loss Masking** (tokens corresponding to `User: ...` are labeled with `target = -100` so gradient updates occur exclusively on assistant responses)
 - **Loss Progression**:
   - Step 1: Initial SFT loss `2.9302`
@@ -123,11 +123,11 @@ Evaluated using length-normalized completion log-likelihood over 4 candidate cho
 
 | Domain Category | Pre-SFT Base Model (`best_tinygpt_500m.pt`) | Post-SFT Aligned Model (`usaid_ai_500m.pt`) | Empirical Delta |
 | :--- | :---: | :---: | :---: |
-| **ML & Transformer Architecture** | $2 / 5$ (40.0%) | **$3 / 5$ (60.0%)** | **+20.0%** |
-| **World Knowledge & Science** | $2 / 5$ (40.0%) | **$3 / 5$ (60.0%)** | **+20.0%** |
-| **Python & Software Engineering** | $1 / 5$ (20.0%) | $1 / 5$ (20.0%) | Baseline |
-| **Logic & Arithmetic** | $1 / 5$ (20.0%) | $1 / 5$ (20.0%) | Baseline |
-| **OVERALL ACCURACY** | **$6 / 20$ (30.0%)** | **$8 / 20$ (40.0%)** | **+10.0%** |
+| **ML & Transformer Architecture** | 40% | **60%** | **+20%** |
+| **World Knowledge & Science** | 40% | **60%** | **+20%** |
+| **Python & Software Engineering** | 20% | 20% | Baseline |
+| **Logic & Arithmetic** | 20% | 20% | Baseline |
+| **OVERALL ACCURACY** | **30%** | **40%** | **+10%** |
 
 ---
 
