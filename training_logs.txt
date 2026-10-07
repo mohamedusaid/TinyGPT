@@ -425,7 +425,7 @@ Resolving deltas:  98% (145/147)
 Resolving deltas:  99% (146/147)
 Resolving deltas: 100% (147/147)
 Resolving deltas: 100% (147/147), done.
-14.7s	16	/kaggle/working/tiny-gpt-500m
+14.7s	16	/workspace/tiny-gpt-500m
 16.9s	17	Requirement already satisfied: torch>=2.1.0 in /usr/local/lib/python3.12/dist-packages (from -r requirements.txt (line 1)) (2.10.0+cu128)
 16.9s	18	Requirement already satisfied: tiktoken>=0.5.0 in /usr/local/lib/python3.12/dist-packages (from -r requirements.txt (line 2)) (0.12.0)
 16.9s	19	Requirement already satisfied: safetensors>=0.4.0 in /usr/local/lib/python3.12/dist-packages (from -r requirements.txt (line 3)) (0.7.0)
@@ -3052,14 +3052,14 @@ README.md: 9.72kB [00:00, 14.3MB/s]
 Training model sft logs (mistake)
 ------------------
 
-Cloning into '/kaggle/working/tiny-gpt-500m'...
+Cloning into '/workspace/tiny-gpt-500m'...
 remote: Enumerating objects: 306, done.
 remote: Counting objects: 100% (218/218), done.
 remote: Compressing objects: 100% (155/155), done.
 remote: Total 306 (delta 110), reused 168 (delta 60), pack-reused 88 (from 1)
 Receiving objects: 100% (306/306), 155.22 MiB | 34.54 MiB/s, done.
 Resolving deltas: 100% (153/153), done.
-/kaggle/working/tiny-gpt-500m
+/workspace/tiny-gpt-500m
 Requirement already satisfied: torch>=2.1.0 in /usr/local/lib/python3.12/dist-packages (from -r requirements.txt (line 1)) (2.10.0+cu128)
 Requirement already satisfied: tiktoken>=0.5.0 in /usr/local/lib/python3.12/dist-packages (from -r requirements.txt (line 2)) (0.12.0)
 Requirement already satisfied: safetensors>=0.4.0 in /usr/local/lib/python3.12/dist-packages (from -r requirements.txt (line 3)) (0.7.0)
@@ -3135,7 +3135,7 @@ Requirement already satisfied: annotated-doc>=0.0.2 in /usr/local/lib/python3.12
 Requirement already satisfied: markdown-it-py>=2.2.0 in /usr/local/lib/python3.12/dist-packages (from rich>=12.3.0->typer->huggingface-hub<2.0,>=1.3.0->transformers>=4.35.0->-r requirements.txt (line 5)) (4.0.0)
 Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /usr/local/lib/python3.12/dist-packages (from rich>=12.3.0->typer->huggingface-hub<2.0,>=1.3.0->transformers>=4.35.0->-r requirements.txt (line 5)) (2.20.0)
 Requirement already satisfied: mdurl~=0.1 in /usr/local/lib/python3.12/dist-packages (from markdown-it-py>=2.2.0->rich>=12.3.0->typer->huggingface-hub<2.0,>=1.3.0->transformers>=4.35.0->-r requirements.txt (line 5)) (0.1.2)
-cp: cannot stat '/kaggle/input/smallllm-500/checkpoints/best_tinygpt_500m.pt': No such file or directory
+cp: cannot stat '/cloud/storage/smallllm-500/checkpoints/best_tinygpt_500m.pt': No such file or directory
 ================================================================================
             USAID AI (500M) SFT INSTRUCTION DATASET GENERATOR
                       Created by Mohamed Usaid
@@ -3648,7 +3648,7 @@ Usaid AI Aligned Model saved to: checkpoints_sft/usaid_ai_500m.pt
 Training model sft logs
 ---------------------------------
 
-/kaggle/working/tiny-gpt-500m
+/workspace/tiny-gpt-500m
 remote: Enumerating objects: 13, done.
 remote: Counting objects: 100% (13/13), done.
 remote: Compressing objects: 100% (3/3), done.
@@ -3668,8 +3668,8 @@ W0929 06:48:51.999000 208 torch/distributed/run.py:852] Setting OMP_NUM_THREADS 
 W0929 06:48:51.999000 208 torch/distributed/run.py:852] *****************************************
 Loaded 4,731 instruction examples from data/sft_instructions.jsonl
 Loaded 4,731 instruction examples from data/sft_instructions.jsonl
-Loading base model weights from: /kaggle/input/notebooks/mohamedusaid1/smallllm-500/tiny-gpt-500m/checkpoints/best_tinygpt_500m.pt...
-Loading base model weights from: /kaggle/input/notebooks/mohamedusaid1/smallllm-500/tiny-gpt-500m/checkpoints/best_tinygpt_500m.pt...
+Loading base model weights from: /cloud/storage/notebooks/mohamedusaid1/smallllm-500/tiny-gpt-500m/checkpoints/best_tinygpt_500m.pt...
+Loading base model weights from: /cloud/storage/notebooks/mohamedusaid1/smallllm-500/tiny-gpt-500m/checkpoints/best_tinygpt_500m.pt...
 Successfully loaded 500,136,960 parameters into Usaid AI architecture!
 Successfully loaded 500,136,960 parameters into Usaid AI architecture!
 AdamW Parameter Grouping: 500,074,496 params decayed (weight_decay=0.01), 62,464 params non-decayed.

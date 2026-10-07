@@ -10,7 +10,7 @@
 [![GitHub License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Parameters](https://img.shields.io/badge/Parameters-500.14M-blueviolet.svg)](#1-architectural-specification)
-[![Hardware](https://img.shields.io/badge/Pretrained%20On-Kaggle%20Dual%20Tesla%20T4%20(DDP)-yellow.svg)](#3-empirical-training--convergence-results)
+[![Hardware](https://img.shields.io/badge/Pretrained%20On-Dual%20Cloud%20GPUs%20(2x%20Tesla%20T4)-yellow.svg)](#3-empirical-training--convergence-results)
 
 [**Live Interactive Chat Demo**](https://huggingface.co/spaces/Usaidddddddddddddd/UsaidAI-500M-Chat) • [**Hugging Face Model Weights**](https://huggingface.co/Usaidddddddddddddd/UsaidAI-500M) • [**Architecture Specs**](#1-architectural-specification) • [**CLI & Usage Guide**](#4-comprehensive-usage-guide)
 
@@ -92,7 +92,7 @@ TOTAL ACTUAL PARAMETERS:                  500,136,960 (100.00%)
 ## 3. Empirical Training & Convergence Results
 
 ### Pretraining Phase (Foundational Base Model)
-- **Hardware**: Kaggle Dual Tesla T4 GPUs ($2 \times 16\text{ GB} = 32\text{ GB}$ GDDR6)
+- **Hardware**: Dual Cloud GPUs ($2 \times 16\text{ GB}$ NVIDIA Tesla T4, $32\text{ GB}$ GDDR6 total)
 - **Distributed Strategy**: PyTorch DistributedDataParallel (DDP, `torchrun`, `world_size=2`)
 - **Optimizer**: CUDA Fused AdamW ($\beta_1=0.9, \beta_2=0.95$, weight decay $0.1$ with 1D bias/norm exclusion)
 - **Learning Rate Schedule**: Cosine Annealing with Linear Warmup ($1.0 \times 10^{-6} \to 3.0 \times 10^{-4} \to 3.0 \times 10^{-5}$)

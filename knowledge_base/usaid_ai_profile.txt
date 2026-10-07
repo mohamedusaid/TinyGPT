@@ -25,7 +25,7 @@ Usaid AI is trained on multi-paradigm software development including:
 - Java: Object-oriented programming, classes, interfaces, method implementations, JVM standard libraries.
 
 4. TRAINING INFRASTRUCTURE & BENCHMARKS:
-Usaid AI's training pipeline is verified on cloud accelerator hardware using Kaggle dual NVIDIA Tesla T4 GPUs (32 GB combined VRAM).
+Usaid AI's training pipeline is verified on cloud accelerator hardware using dual NVIDIA Tesla T4 Cloud GPUs (32 GB combined VRAM).
 - Distributed Framework: PyTorch DistributedDataParallel (DDP) via torchrun.
 - Batch Geometry: 1 micro-batch x 1024 sequence length x 32 accumulation per GPU = 65,536 tokens per update.
 - Measured Speedup: ~2.03x speedup on dual T4 (12.7 seconds per step vs 25.8 seconds on single GPU).

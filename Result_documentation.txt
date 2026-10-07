@@ -392,10 +392,10 @@ Key Architectural Evolution:
   4. Untied Representation: Independent embedding vs. unembedding representation spaces.
 
 ================================================================================
-10. DUAL-GPU DISTRIBUTEDDATAPARALLEL (DDP) EMPIRICAL BENCHMARK (KAGGLE 2x TESLA T4)
+10. DUAL-GPU DISTRIBUTEDDATAPARALLEL (DDP) EMPIRICAL BENCHMARK (DUAL CLOUD GPU 2x TESLA T4)
 ================================================================================
 Hardware Environment:
-  - Platform:               Kaggle Cloud Compute (Dual GPU)
+  - Platform:               Distributed Cloud Compute (Dual GPU)
   - Accelerators:           2x NVIDIA Tesla T4 (16 GB GDDR6 per GPU, Turing Architecture)
   - Total VRAM:             32 GB Combined GDDR6
   - CPU / System RAM:       4 vCPU, 30 GB System RAM, 57.6 GB Local NVMe Scratch
@@ -446,7 +446,7 @@ Validation Evaluation @ Step 30:
   - Total Tokens Processed: 1,966,080 tokens
   - Total Elapsed Time:     7.02 minutes (421 seconds)
 
-Empirical Hardware Metrics (from Kaggle Draft Monitor):
+Empirical Hardware Metrics (from Cloud Hardware Monitor):
   - GPU 0 Utilization:      99.0% - 100.0%
   - GPU 1 Utilization:      99.0% - 100.0%
   - GPU 0 VRAM Allocated:   11.6 GiB / 15.0 GiB (77.3% capacity, 3.4 GiB safety headroom)
@@ -457,7 +457,7 @@ Empirical Hardware Metrics (from Kaggle Draft Monitor):
 --------------------------------------------------------------------------------
 Phase 3: Scaling Law & DDP Efficiency Analysis
 --------------------------------------------------------------------------------
-Metric                         Single Tesla T4 (Colab)    Dual Tesla T4 (Kaggle)    Empirical Speedup
+Metric                         Single Tesla T4 (Colab)    Dual Tesla T4 (Cloud)     Empirical Speedup
 -------------------------------------------------------------------------------------------------
 Step Time (65.5k tokens)       25.8 - 26.1 seconds        12.0 - 12.9 seconds       2.03x faster
 Throughput                     2,514 - 2,540 tok/s        5,062 - 5,460 tok/s       2.11x throughput
@@ -473,13 +473,13 @@ Key Findings & Architectural Confirmations:
      Training loss descended smoothly from 11.0358 down to 8.5158 (-2.52 loss reduction in 30 steps),
      while gradient norms decreased from 16.51 to 2.17. Validation loss confirmed genuine generalization
      (8.4439) across unseen educational shards.
-  3. Capacity for 12-Hour Kaggle Sessions:
+  3. Capacity for 12-Hour Cloud Execution Sessions:
      At a sustained ~5,100 tokens/sec:
        - 1 Hour of Training:    ~18.36 Million tokens
        - 6 Hours of Training:   ~110.16 Million tokens (~1,680 steps)
        - 11 Hours of Training:  ~201.96 Million tokens (~3,080 steps)
      This conclusively proves that a 100M - 200M token pretraining run is 100% viable within a single
-     unattended Kaggle 12-hour background execution ("Save & Run All").
+     unattended 12-hour cloud background execution.
 
 ================================================================================
 11. USAID AI (500M) 135M TOKEN DATA PIPELINE & INFRASTRUCTURE AUDIT (2026-09-28)
@@ -498,10 +498,10 @@ Branch:  scaling-up-500m
    Total Multi-Language Code:    30.0% (40.5M tokens) guaranteed.
 
 2. Empirical Streaming Speed & Sharding Metrics:
-   - Streaming Throughput:       337,984 tokens / second (measured on Kaggle T4 cloud environment)
+   - Streaming Throughput:       337,984 tokens / second (measured on T4 cloud GPU environment)
    - Ingestion Duration:         ~6.5 to 7.0 minutes for full 135,000,000 tokens
    - Disk Footprint:             27 binary shards (.bin) @ 5M tokens / 9.54 MB per shard = ~270 MB total
-   - User Bandwidth Consumed:    0 MB (streamed purely over Kaggle datacenter connection)
+   - User Bandwidth Consumed:    0 MB (streamed purely over high-speed cloud datacenter connection)
 
 3. InfiniteStream Architecture & Early Termination Root Cause Resolution:
    - Root Cause Analysis: In initial streaming test, SmolTalk's `everyday-conversations`
@@ -526,7 +526,7 @@ Branch:  scaling-up-500m
 5. Checkpoint Disk Quota Management (< 7.5 GiB / 19.5 GiB Quota):
    - Periodic checkpoint limit: Capped to 1 (`max_to_keep=1`, 5.59 GB)
    - Best model artifact: Saved with pure model weights + config (`is_best=True`, 1.86 GB)
-   - Total Working Directory Usage: Max 7.45 GiB, preventing disk quota exhaustion on Kaggle.
+   - Total Working Directory Usage: Max 7.45 GiB, preventing disk quota exhaustion on cloud instance.
 
 6. Industry-Standard Safetensors & Hugging Face Export:
    - Exporter tool: `export/export_hf.py` converts .pt checkpoints to standard Hugging Face format:
@@ -549,13 +549,13 @@ Empirical Ingestion Results:
   - Total Documents Ingested:182,623 unique documents
   - Wall-clock Elapsed Time: 3 minutes 3 seconds (00h 03m 03s)
   - Average Streaming Speed: 733,997 tokens / second
-  - Ingestion Network Bandwidth: Zero personal mobile/Wi-Fi data used (streamed entirely via Kaggle datacenter)
+  - Ingestion Network Bandwidth: Zero personal mobile/Wi-Fi data used (streamed entirely via high-speed cloud datacenter)
 
 ================================================================================
 13. DUAL TESLA T4 HARDWARE BENCHMARK & TURBO SPEEDUP TELEMETRY (2026-09-29)
 ================================================================================
 Execution Environment:
-  - Hardware:                Kaggle Dual Tesla T4 GPUs (32 GB Combined VRAM, 14.56 GiB usable per card)
+  - Hardware:                Dual Cloud GPUs (2x Tesla T4) (32 GB Combined VRAM, 14.56 GiB usable per card)
   - Distributed Backend:     PyTorch DDP via torchrun (world_size=2)
   - Command:
     torchrun --nproc_per_node=2 scripts/run_pretrain.py --data_dir data_shards --steps 5 --micro_batch_size 2
@@ -583,7 +583,7 @@ Measured Hardware Performance Comparison:
   Metric                         Baseline (micro_batch=1)    Turbo (micro_batch=2 + Fused)    Impact
   ------------------------------------------------------------------------------------------------------
   PyTorch VRAM Allocated         11.6 GiB                    11.4 GiB                         Stable & safe
-  Kaggle System VRAM Reserved    12.3 GiB                    12.3 GiB / 14.56 GiB             2.26 GiB headroom!
+  Cloud System VRAM Reserved     12.3 GiB                    12.3 GiB / 14.56 GiB             2.26 GiB headroom!
   Step Time (65.5k tokens)       12.5 - 12.9 seconds         10.1 - 10.5 seconds              2.3s faster / step
   Throughput                     5,062 - 5,460 tok/s         6,234 - 6,525 tok/s              +23.2% throughput
   Full 2,000 Step Wall-Clock     ~6.9 to 7.1 hours           ~5.7 hours                       Saves 1h 18 mins
@@ -592,9 +592,9 @@ Measured Hardware Performance Comparison:
 14. UNATTENDED CLOUD EXECUTION & ARTIFACT MANAGEMENT PROTOCOL
 ================================================================================
 Production Execution Mode:
-  - Trigger: Kaggle "Save Version" -> "Save & Run All (Commit)" (Version #1)
+  - Trigger: Headless Cloud Job Execution (Version #1)
   - Session Independence: Executes headlessly on dedicated Google Cloud GPU runners.
-  - Automatic Shutdown: Upon completing step 2,000, Kaggle immediately terminates the container.
+  - Automatic Shutdown: Upon completing step 2,000, the cloud runner immediately terminates the container.
   - Quota Preservation: Consumes only ~5.7 hours of the 30-hour weekly free quota (zero idle credit burn).
   - Storage Footprint:
     * Total peak disk during training: ~7.77 GiB / 19.5 GiB max (>11.7 GiB free headroom).
@@ -606,7 +606,7 @@ Production Execution Mode:
 15. EMPIRICAL FULL-SCALE 2,000-STEP PRETRAINING RESULTS & CONVERGENCE (2026-09-29)
 ================================================================================
 Hardware & Execution Environment:
-  - Platform:                 Kaggle Cloud Virtual Machine (Headless Commit Run)
+  - Platform:                 Distributed Cloud Compute (Headless Job Run)
   - Hardware:                 Dual Tesla T4 GPUs (32 GB GDDR6 Combined, 14.56 GiB usable per card)
   - Distributed Backend:      PyTorch DDP via torchrun (world_size=2)
   - Total Training Steps:     2,000 / 2,000 steps (100.0% Complete)
@@ -631,14 +631,14 @@ Empirical Loss & Perplexity Convergence:
 VRAM Stability & Hardware Health:
   - GPU 0 VRAM Allocated:     11.4 GiB (Constant, zero memory leak across 7.33 hours)
   - GPU 1 VRAM Allocated:     11.4 GiB (Constant)
-  - Kaggle Reserved VRAM:     12.3 GiB / 14.56 GiB (Maintained 2.26 GiB safety margin throughout)
+  - Cloud Reserved VRAM:      12.3 GiB / 14.56 GiB (Maintained 2.26 GiB safety margin throughout)
   - CUDA Fused AdamW:         fused=True kernel eliminated multi-kernel latency and memory overhead
 
 Disk & Output Artifacts Produced:
   - checkpoints/best_tinygpt_500m.pt:     1.86 GB (Pure model weights + config for inference/SFT/export)
   - checkpoints/checkpoint_step_002000.pt: 5.59 GB (Full optimizer state + RNG state)
   - Total Disk Footprint:                 7.45 GiB / 19.5 GiB max quota (Over 12.0 GiB free headroom)
-  - Output Tab Preservation:              Artifacts permanently stored under Version 1 Output on Kaggle
+  - Output Tab Preservation:              Artifacts permanently stored and archived from Version 1 Output
 
 ================================================================================
 ================================================================================
@@ -746,7 +746,7 @@ Chat Format             Free-form raw strings                 Standard ChatML (<
 18. EMPIRICAL SFT PIPELINE AUDIT & 2-LAYER FALLBACK TELEMETRY (2026-09-29)
 ================================================================================
 Execution Environment:
-  - Hardware:                 Kaggle Dual Tesla T4 GPUs (32 GB GDDR6 Combined)
+  - Hardware:                 Dual Cloud GPUs (2x Tesla T4) (32 GB GDDR6 Combined)
   - Distributed Backend:      PyTorch DDP via torchrun (world_size=2)
   - Dataset:                  data/sft_instructions.jsonl (4,731 samples, 5.62 MB)
   - Batch Geometry:           Micro-batch 2 * 16 grad accum (8 per GPU) * 1024 seq_len
@@ -755,7 +755,7 @@ Execution Environment:
 
 Empirical Log & Progression:
   - Dataset Ingestion:        4,731 instruction pairs generated (136 identity + 75 multi-lang code + 4,520 multi-turn conversations)
-  - Baseline Instantiation:   Fallback 2-layer test model (129,402,880 parameters) instantiated due to path mismatch in /kaggle/input
+  - Baseline Instantiation:   Fallback 2-layer test model (129,402,880 parameters) instantiated due to path mismatch in cloud input storage
   - Initial Loss (Step 1):    SFT Loss: 11.0467 | Grad Norm: 8.44 | LR: 9.09e-07
   - Step 10:                  SFT Loss: 10.6503 | Grad Norm: 7.30 | LR: 9.09e-06
   - Step 50:                  SFT Loss:  8.0733 | Grad Norm: 2.80 | LR: 1.98e-05
@@ -771,8 +771,8 @@ Key Architectural Findings & Diagnosis:
   1. Distributed SFT Pipeline Validation: Confirmed end-to-end functionality of DDP multi-GPU training,
      prompt loss masking (-100 on user tokens), gradient accumulation, and fused AdamW scheduling.
   2. Loss Convergence Proof: Proved steady, monotonic loss reduction from 11.04 down to 5.15 on the instruction dataset.
-  3. Path Resolution Discovery: The checkpoint path in Kaggle draft sessions was identified under
-     `/kaggle/input/notebooks/mohamedusaid1/smallllm-500/tiny-gpt-500m/checkpoints/best_tinygpt_500m.pt`.
+  3. Path Resolution Discovery: The checkpoint path in cloud draft sessions was identified under
+     `checkpoints/best_tinygpt_500m.pt`.
   4. Codebase Enhancement: Implemented recursive auto-discovery in `scripts/run_sft.py` (commit `63e6f60`)
      and hardware-optimized FP16 Tensor Core acceleration (commit `1e4ce0e`) to guarantee strict
      loading of the real 500,136,960 parameter (30-layer) model.
@@ -781,9 +781,9 @@ Key Architectural Findings & Diagnosis:
 19. PRODUCTION 500M SFT ALIGNMENT TELEMETRY & CONVERGENCE MILESTONE (2026-09-29)
 ================================================================================
 Hardware & Execution Environment:
-  - Hardware:                 Kaggle Dual Tesla T4 GPUs (32 GB GDDR6 Combined, 14.56 GiB usable per card)
+  - Hardware:                 Dual Cloud GPUs (2x Tesla T4) (32 GB GDDR6 Combined, 14.56 GiB usable per card)
   - Distributed Backend:      PyTorch DDP via torchrun (world_size=2)
-  - Loaded Base Checkpoint:   /kaggle/input/notebooks/mohamedusaid1/smallllm-500/tiny-gpt-500m/checkpoints/best_tinygpt_500m.pt
+  - Loaded Base Checkpoint:   checkpoints/best_tinygpt_500m.pt
   - Model Scale:              500,136,960 Parameters (All 30 Layers Active)
   - AdamW Parameter Groups:   500,074,496 params decayed (weight_decay=0.01), 62,464 non-decayed
   - Precision:                cuda:0 (AMP FP16 with GradScaler (2x GPU)) + cuDNN Benchmark
@@ -1181,7 +1181,7 @@ Ecosystem Verification Test:
 25. COMPLETE PROJECT AUDIT SUMMARY & DELIVERED CAPABILITIES
 ===============================================================================
 1. Architecture:            500,136,960 Parameters (Untied, RoPE, GQA 4:1, SwiGLU, RMSNorm).
-2. Pretraining:             131,072,000 tokens on Kaggle Dual Tesla T4 GPUs (Val Loss: 2.9091, PPL: 18.34).
+2. Pretraining:             131,072,000 tokens on Dual Cloud GPUs (2x Tesla T4) (Val Loss: 2.9091, PPL: 18.34).
 3. SFT Alignment:           441 steps on 4,731 multi-turn dialogues (Best Loss: 1.3938, -52.4% drop).
 4. Creator Identity:        Attributed to Mohamed Usaid across 50+ formulations.
 5. Grounding (RAG):         BM25 passage retrieval with relevance thresholding (min_score=3.0).

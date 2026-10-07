@@ -47,7 +47,7 @@ def parse_args():
 
 def resolve_base_model_path(path: str) -> str:
     """
-    Resolves the base model checkpoint path, automatically searching /kaggle/input
+    Resolves the base model checkpoint path, automatically searching cloud input directories
     and common checkpoint folders if the exact path does not exist.
     """
     if os.path.exists(path):
@@ -64,18 +64,18 @@ def resolve_base_model_path(path: str) -> str:
             print(f"Discovered base model at: {c}")
             return c
 
-    # Recursively search Kaggle inputs if running on Kaggle
+    # Recursively search cloud storage mounts if available
     if os.path.exists("/kaggle/input"):
         for root, _, files in os.walk("/kaggle/input"):
             if "best_tinygpt_500m.pt" in files:
                 found = os.path.join(root, "best_tinygpt_500m.pt")
-                print(f"Auto-discovered base model in Kaggle input at: {found}")
+                print(f"Auto-discovered base model in cloud storage at: {found}")
                 return found
 
     raise FileNotFoundError(
         f"Base model checkpoint not found at '{path}'. "
-        "Please attach your trained notebook output (SmallLLM-500) as an Input on Kaggle, "
-        "or ensure best_tinygpt_500m.pt is present."
+        "Please attach your trained model checkpoint in cloud storage, "
+        "or ensure best_tinygpt_500m.pt is present in checkpoints/."
     )
 
 
