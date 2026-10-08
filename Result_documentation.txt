@@ -53,30 +53,403 @@ Total Trainable Parameters:                   500,136,960 (100.00%)
 
 
 ================================================================================
-2. HISTORICAL BASELINE: 15.3M MODEL TRAINING RUN (MEASURED ON TESLA T4)
+2. HISTORICAL BASELINES & ARCHITECTURAL EVOLUTION (0.12M, 6.84M, 11.1M & 15.3M)
 ================================================================================
-Hardware:        Google Colab Tesla T4 (16 GB VRAM)
-CUDA Version:    12.8
-Total Time:      14.03 minutes (5,000 steps)
-Throughput:      17.7 seconds / 100 steps (~23,140 tokens / sec)
-Batch Geometry:  Batch Size = 16, Context = 256 -> 4,096 tokens / step
-Total Tokens:    130,798 unique training tokens, 12,339 val tokens (143,137 total)
-Tokens Seen:     5,000 steps x 4,096 tokens = 20,480,000 tokens (~156.5 Epochs)
+Project:       TinyGPT Experimental Evolution (Local CPU to Cloud GPU)
+Repository:    mohamedusaid/TinyGPT
+Branches:      main, scaling-up, qa-finetuning
+Author:        Mohamed Usaid
+Audit Date:    October 2026
 
-Training Progression:
+--------------------------------------------------------------------------------
+COMPREHENSIVE ARCHITECTURAL COMPARISON MATRIX
+--------------------------------------------------------------------------------
+
+Parameter / Feature           TinyGPT-0.12M (Toy)   TinyGPT-6.84M (Local)  TinyGPT-11.1M (Scaling) TinyGPT-15.3M (T4 GPU)
+-------------------------------------------------------------------------------------------------------------------------
+Vocabulary Size (V)           568 (Story Local)     50,257 (GPT-2 BPE)     50,257 (GPT-2 BPE)      50,257 (GPT-2 BPE)
+Context Length (T)            8 tokens              64 tokens              128 tokens              256 tokens
+Hidden Dimension (d_model)    64                    128                    192                     256
+Transformer Layers (L)        1 layer               2 layers               3 layers                3 layers
+Attention Heads (H)           4 heads               4 heads                6 heads                 8 heads
+Head Dimension (d_head)       16 (64/4)             32 (128/4)             32 (192/6)              32 (256/8)
+FFN Intermediate Dim (d_ff)   256 (4x)              512 (4x)               768 (4x)                1,024 (4x)
+Activation Function           GELU                  GELU                   GELU                    GELU
+Positional Encoding           Learned Absolute      Learned Absolute       Learned Absolute        Learned Absolute
+Normalization                 Post-LN / Pre-LN      Pre-LN LayerNorm       Pre-LN LayerNorm        Pre-LN LayerNorm
+LM Head Weight Tying          Untied                Tied (Shared)          Tied (Shared)           Tied (Shared)
+Attention Implementation      Manual Einsum / Dot   Merged Linear QKV      Merged Linear QKV       Merged Linear QKV
+Hardware Target               Intel Core i7 (CPU)   Intel Core i7 (CPU)    Intel Core i7 (CPU)     NVIDIA Tesla T4 (GPU)
+Total Trainable Parameters    122,944               6,837,120              11,104,896              15,301,120
+
+--------------------------------------------------------------------------------
+EXACT PARAMETER DECOMPOSITION TABLES
+--------------------------------------------------------------------------------
+
+A. TinyGPT-6.84M Baseline (Actual Count: 6,837,120)
+  1. Token Embedding (V=50257, d=128):          6,432,896  (94.09%)
+  2. Position Embedding (T=64, d=128):              8,192   (0.12%)
+  3. Transformer Layers (2 Layers):               395,776   (5.79%)
+       Per Layer Breakdown (197,888 params):
+       - LayerNorm 1 (weight + bias):                 256
+       - Attention QKV Proj (128 -> 384, no bias): 49,152
+       - Attention Out Proj (128 -> 128, with bias):16,512
+       - LayerNorm 2 (weight + bias):                 256
+       - FFN Linear 1 (128 -> 512, with bias):     66,048
+       - FFN Linear 2 (512 -> 128, with bias):     65,664
+  4. Final LayerNorm (weight + bias):                 256   (0.00%)
+  5. LM Head (d=128, V=50257, Tied to Embeddings):      0   (0.00%)
+  ----------------------------------------------------------------
+  Total Parameters:                             6,837,120 (100.00%)
+
+B. TinyGPT-11.1M Intermediate Scaling Spec (Actual Count: 11,104,896)
+  1. Token Embedding (V=50257, d=192):          9,649,344  (86.89%)
+  2. Position Embedding (T=128, d=192):            24,576   (0.22%)
+  3. Transformer Layers (3 Layers):             1,430,592  (12.88%)
+       Per Layer Breakdown (476,864 params):
+       - LayerNorm 1:                                 384
+       - Attention QKV Proj (192 -> 576, no bias):110,592
+       - Attention Out Proj (192 -> 192, with bias):37,056
+       - LayerNorm 2:                                 384
+       - FFN Linear 1 (192 -> 768, with bias):    148,224
+       - FFN Linear 2 (768 -> 192, with bias):    147,648
+  4. Final LayerNorm:                                 384   (0.00%)
+  5. LM Head (Tied to Token Embedding):                 0   (0.00%)
+  ----------------------------------------------------------------
+  Total Parameters:                            11,104,896 (100.00%)
+
+C. TinyGPT-15.3M Cloud T4 Production Model (Actual Count: 15,301,120)
+  1. Token Embedding (V=50257, d=256):         12,865,792  (84.08%)
+  2. Position Embedding (T=256, d=256):            65,536   (0.43%)
+  3. Transformer Layers (3 Layers):             2,369,280  (15.48%)
+       Per Layer Breakdown (789,760 params):
+       - LayerNorm 1:                                 512
+       - Attention QKV Proj (256 -> 768, no bias):196,608
+       - Attention Out Proj (256 -> 256, with bias):65,792
+       - LayerNorm 2:                                 512
+       - FFN Linear 1 (256 -> 1024, with bias):   263,168
+       - FFN Linear 2 (1024 -> 256, with bias):   262,656
+  4. Final LayerNorm:                                 512   (0.00%)
+  5. LM Head (Tied to Token Embedding):                 0   (0.00%)
+  ----------------------------------------------------------------
+  Total Parameters:                            15,301,120 (100.00%)
+
+--------------------------------------------------------------------------------
+SCRATCH IMPLEMENTATION & FUNDAMENTAL TENSOR MECHANICS (CPU AUDIT)
+--------------------------------------------------------------------------------
+Environment: Windows 11, Intel Core i7, Iris Xe, 16 GB RAM, Python 3.13.1, PyTorch 2.14.0+cpu
+
+1. Tokenization Ingestion Telemetry:
+   - Source Corpus: content.txt (Erasmus Thorne Story)
+   - Raw Metrics: 802 words | 5,198 characters
+   - BPE Tokenizer: GPT-2 byte-level BPE (`r50k_base` via `tiktoken`)
+   - Output Representation: 1,072 discrete token IDs
+   - First 8 Ingested Tokens:
+     T1: 33 ('B') | T2: 1734 ('ene') | T3: 776 ('ath') | T4: 257 (' a') |
+     T5: 44379 (' bruised') | T6: 290 (' and') | T7: 45725 (' violet') | T8: 6766 (' sky')
+     Target (T9): 11 (',')
+
+2. Mathematical Verification of Core Operators:
+   - Embedding Lookup: Looked up row 33 from `nn.Embedding(50257, 64)`. Tensor values were not
+     bounded in [-1, +1] (e.g., initial extremes reached -2.0970 and +3.4489).
+   - Positional Encoding Addition: Verified vector addition `X = token_vectors + position_vectors`.
+     T1 dim 0: -1.4863 (token) + (-0.4928) (pos) = -1.9791.
+   - Attention Projection & Dot Products:
+     Calculated Q, K, V via linear projection. Dot product scores for T1 across T1..T8 produced
+     extreme magnitudes prior to scaling (-1779.24 to +755.02) due to initial standard normal weights.
+   - Scaled Dot-Product Attention:
+     Dividing by sqrt(d_k) = sqrt(16) = 4 (or sqrt(64)=8) damped scores before Softmax.
+   - Causal Attention Masking:
+     Applied `torch.tril(torch.ones(T, T))` filled with `-inf` on upper triangle.
+     Guaranteed position T1 attended strictly to position T1 (Softmax weight = 1.000000).
+
+3. The Unused Projection Bug & Architecture Ablation:
+   - Defect Identified: Code computed `projected_output = output @ Wo`, but subsequent residual
+     lines evaluated `output = output + residual`, completely bypassing `Wo`.
+   - Resolution: Corrected dataflow to `output = projected_output + residual`, ensuring full gradient
+     flow through output projection weights.
+
+--------------------------------------------------------------------------------
+TOY VOCABULARY EXPERIMENT: THE 568-TOKEN ABLATION (TINYGPT-0.12M)
+--------------------------------------------------------------------------------
+Motivation:
+Evaluating 50,257 logits over 128 positions per batch on a CPU caused compute saturation.
+An ablation was executed by re-mapping only the 568 unique tokens present in `content.txt`
+to compact contiguous indices [0..567].
+
+Configuration:
+  - Vocabulary:          568 unique story tokens
+  - Model Dimension:     d_model = 64, Context = 8, Heads = 4, Layers = 1
+  - Total Parameters:    122,944 (0.12M)
+  - Optimizer / Steps:   AdamW, lr = 0.001, 2,000 steps
+
+Progression Telemetry:
+  Step    0 | Train Loss: 6.4780 | Val Loss: 6.4735
+  Step  100 | Train Loss: 4.5342 | Val Loss: 5.8481
+  Step  200 | Train Loss: 2.6461 | Val Loss: 6.1605  <-- Val loss inflection point
+  Step  400 | Train Loss: 1.1199 | Val Loss: 7.3744
+  Step  800 | Train Loss: 0.3182 | Val Loss: 8.3182
+  Step 1200 | Train Loss: 0.2320 | Val Loss: 8.8806
+  Step 1600 | Train Loss: 0.2174 | Val Loss: 8.9376
+  Step 2000 | Train Loss: 0.1833 | Val Loss: 9.4009  <-- Severe Overfitting Delta (+2.92)
+
+Diagnostic Conclusion:
+Pruning the vocabulary to in-corpus tokens proved mathematically that parameter count alone does
+not govern generalization. With only 964 training tokens, the 122k-parameter model achieved near-zero
+training loss while validation loss degraded to 9.40. A model must train on open vocabulary to
+enable transfer and downstream retrieval tasks.
+
+--------------------------------------------------------------------------------
+TINYGPT-6.84M LOCAL CPU BASELINE TRAINING RUN
+--------------------------------------------------------------------------------
+Hardware Environment:
+  - System:              Windows 11 Laptop
+  - Processor:           Intel Core i7 with Intel Iris Xe Graphics (CPU Execution)
+  - Memory:              16 GB System RAM
+  - Software Stack:      Python 3.13.1, PyTorch 2.14.0+cpu, tiktoken 0.14.0
+
+Dataset Geometry:
+  - Corpus:              content.txt (Erasmus Thorne, Cartographer of Forgotten Rivers)
+  - Total Tokens:        1,072 tokens
+  - Training Partition:  964 tokens (90%)
+  - Validation Partition:108 tokens (10%)
+  - Training Batch:      Batch Size = 8, Context = 64 -> 512 tokens / step
+  - Optimization:        AdamW (lr=3e-4, weight_decay=0.01), Gradient Clipping = 1.0
+
+Empirical Training Telemetry (3,000 Steps, Elapsed ~30 Minutes):
+  Step    0 | Train Loss: 10.7542 | Val Loss: 10.7268
+  Step  100 | Train Loss:  5.6421 | Val Loss:  7.8928
+  Step  200 | Train Loss:  4.0445 | Val Loss:  7.5187  <-- OPTIMAL VALIDATION CHECKPOINT
+  Step  300 | Train Loss:  2.6046 | Val Loss:  7.7840
+  Step  400 | Train Loss:  1.2683 | Val Loss:  7.8472
+  Step  500 | Train Loss:  0.5136 | Val Loss:  7.9258
+  Step  600 | Train Loss:  0.2120 | Val Loss:  8.1158
+  Step  800 | Train Loss:  0.0761 | Val Loss:  8.4142
+  Step 1000 | Train Loss:  0.0505 | Val Loss:  8.5753
+  Step 1400 | Train Loss:  0.0432 | Val Loss:  8.6202
+  Step 1800 | Train Loss:  0.0366 | Val Loss:  8.8753
+  Step 2200 | Train Loss:  0.0292 | Val Loss:  8.7829
+  Step 2600 | Train Loss:  0.0276 | Val Loss:  8.8659
+  Step 3000 | Train Loss:  0.0249 | Val Loss:  9.0916  <-- Severe memorization (+1.57 val loss drift)
+
+Convergence Evaluation:
+  - Initial Loss:          10.7542 (Matches theoretical uniform random baseline: ln(50257) = 10.8248)
+  - Final Training Loss:   0.0249
+  - Final Validation Loss: 9.0916
+  - Best Validation Loss:  7.5187 (Recorded at Step 200)
+  - Saved Artifact:        tiny_gpt.pt (6,837,120 parameters)
+
+Generative Sampling Output (Prompt: "Beneath a bruised and violet sky,"):
+  "Beneath a bruised and violet sky, where the last tendrils of autumn clung stubbornly to the skeletal
+   branches of ancient elms, there lived an elderly cartographer named Erasmus Thorne. His cottage, perched
+   precariously upon a limestone bluff overlooking the village of Ashenmere, was a labyrinthine repository
+   of parchment, ink, and the accumulated whispers of a thousand unmapped territories. Erasmus had devoted
+   his entire existence to charting rivers that no longer existed..."
+
+--------------------------------------------------------------------------------
+INFERENCE & RAG INTEGRATION BENCHMARK (TINYGPT-6.84M)
+--------------------------------------------------------------------------------
+Host Script: scripts/ask.py (TF-IDF Retrieval-Augmented Context Injection + TinyGPT)
+Checkpoint Tested: tiny_gpt.pt (Step 3000)
+
+Runtime Engineering Bug Resolves:
+  1. Checkpoint Key Mismatches: Checkpoint saved keys as `model_state_dict` and `config`. Fixed loader
+     to read `checkpoint["model_state_dict"]`.
+  2. Attention Mask Shape Mismatch: Fixed attention buffer from `[1, 1, 64, 64]` down to `[64, 64]`.
+  3. QKV Bias Flag Alignment: Fixed attention layer specification to strictly enforce `bias=False`.
+  4. Configuration Dictionary Mapping: Reconciled `context_length` -> `context_size` and `embed_dim` -> `embedding_size`.
+
+Empirical Q&A Probe Telemetry:
+
+[Probe 1: Entity Identification]
+  - Query:          "Who is Erasmus Thorne?"
+  - Retrieved Text: "Beneath a bruised and violet sky... there lived an elderly cartographer named Erasmus Thorne."
+  - Model Response: "Beneath a bruised and violet sky, where the last tendrils of autumn clung stubbornly to the skeletal
+                     branches of ancient elms, there lived an elderly cartographer named Erasmus Thorne."
+  - Accuracy:       Extractive hit (10/10 factual correctness).
+
+[Probe 2: Supporting Character Identification]
+  - Query:          "Who is Constable Whitmore?"
+  - Model Response: ""You chase phantoms, old man," muttered Constable Whitmore one frostbitten Tuesday, watching
+                     Erasmus hunch over a crumbling municipal ledger in the archive's dimmest corner."
+  - Accuracy:       Contextually exact narrative snippet.
+
+[Probe 3: Climax Event Query]
+  - Query:          "What happened when Erasmus completed his map?"
+  - Model Response: "On the evening he completed his masterwork, a comprehensive map of the Forgotten Rivers rendered
+                     in meticulous, reverent detail, the ground beneath his cottage shuddered."
+  - Accuracy:       Extractive match.
+
+[Probe 4: Specific Semantic Lookup]
+  - Query:          "What are the Forgotten Rivers?"
+  - Model Response: "And somewhere far beneath the sleeping village, the Forgotten Rivers"
+  - Failure Mode:   Sentence fragmentation. Model lacked structured instruction syntax to formulate a standalone definition.
+
+[Probe 5: Unseen Conversational Input]
+  - Query:          "what's your name?"
+  - Model Response: ""You chase phantoms, old man," muttered Constable Whitmore one frostbitten Tuesday..."
+  - Failure Mode:   Hallucinatory context fallback. Model has no identity awareness; it simply acts as a next-token continuator.
+
+--------------------------------------------------------------------------------
+EOS TOKEN HANDLING & GENERATION TERMINATION AUDIT
+--------------------------------------------------------------------------------
+Tokenizer Setting: Tiktoken GPT-2 BPE (`enc.eot_token` = 50256, `<|endoftext|>`)
+
+Ablation on Model Termination:
+  1. The Silent Continuation Defect: In early test iterations, model generation ran until hitting
+     `max_new_tokens=150`, producing repetitive loops of story text.
+  2. Training Integration: Added `tokens.append(50256)` directly to training text, presenting exactly
+     one EOS transition at sequence terminus.
+  3. Generation Detection: Wrapped the sampling loop with explicit termination detection:
+     `if next_token.item() == EOS_TOKEN_ID: break`.
+  4. Empirical Finding: Due to having only 1 single EOS instance across 1,072 training tokens, the
+     model rarely assigned dominant probability mass to token 50256 mid-sentence, defaulting to
+     `MAX_GENERATION_TOKENS` cutoff unless explicitly given instruction-formatted datasets.
+
+--------------------------------------------------------------------------------
+TINYGPT-11.1M SCALING BLUEPRINT & CPU BOTTLENECK ANALYSIS
+--------------------------------------------------------------------------------
+Proposed Configuration:
+  - Vocabulary:            50,257
+  - Context Length:        128 tokens
+  - Hidden Dimension:      192 (d_head = 32 across 6 attention heads)
+  - Layers:                3 Transformer Blocks
+  - Dataset Target:        30,000 words (~40,000 tokens)
+  - Trainable Parameters:  11,104,896
+
+CPU Performance Bottleneck Modeling:
+  - Step Arithmetic:
+    At batch_size = 8, context = 128: 1,024 tokens / step.
+    Over 3 layers of d_model = 192, FLOPs per step scale by ~4.2x relative to the 6.84M baseline.
+  - Compute Speed:
+    On an Intel Core i7 CPU, execution time measures ~2.8 to 3.2 seconds / step.
+  - Wall-Clock Estimation for 1,000 Steps:
+    1,000 steps x 3.0s = 3,000 seconds = 50.0 minutes (excluding validation pauses).
+  - Memory Footprint:
+    System RAM usage modeled at ~1.8 GB. Zero out-of-memory risk, but compute-bound by
+    CPU AVX-512 / vector matrix multiplications.
+  - Decision: Transition heavy 5,000+ step scaling experiments to cloud GPU hardware (Tesla T4).
+
+--------------------------------------------------------------------------------
+TINYGPT-15.3M CLOUD GPU PRETRAINING RUN (TESLA T4 TELEMETRY)
+--------------------------------------------------------------------------------
+Hardware Environment:
+  - Platform:              Cloud GPU Environment
+  - Accelerator:           NVIDIA Tesla T4 (15.0 GiB VRAM capacity, Turing Architecture)
+  - CUDA Version:          12.8
+  - Precision:             FP32 / PyTorch Native Cuda
+
+Model Configuration:
+  - Parameters:            15,301,120
+  - Sequence Context:      256 tokens
+  - Hidden Size:           256
+  - Attention Heads:       8 heads (d_head = 32)
+  - Layers:                3 Transformer Blocks
+  - Batch Geometry:        Batch Size = 16, Context = 256 -> 4,096 tokens / step
+
+Dataset Geometry (TinyGPT v2 Hybrid Corpus):
+  - General Text:          62,093 words across 660 blocks
+  - Q&A Instruction Pairs: 596 examples (16,132 words)
+  - QA Re-sampling Weight: 3x oversampled
+  - Training Set:          130,798 tokens
+  - Validation Set:        12,339 tokens
+  - Total Corpus:          143,137 tokens
+
+Empirical Progression Telemetry (5,000 Steps, 14.03 Minutes):
+  Step Benchmark: 17.7 seconds / 100 steps (~23,140 tokens / sec throughput)
+
   Step    0 | Train Loss: 10.5574 | Val Loss: 10.5697
   Step  250 | Train Loss:  4.7624 | Val Loss:  5.8446
   Step  500 | Train Loss:  3.5097 | Val Loss:  5.6621
-  Step  750 | Train Loss:  2.5365 | Val Loss:  5.6054  <-- OPTIMAL VALIDATION CHECKPOINT (~23.5 Epochs)
+  Step  750 | Train Loss:  2.5365 | Val Loss:  5.6054  <-- OPTIMAL VALIDATION RECORD (Step 750)
   Step 1000 | Train Loss:  1.7372 | Val Loss:  5.6134
-  Step 1500 | Train Loss:  0.7519 | Val Loss:  6.5557  <-- Overfitting begins
+  Step 1250 | Train Loss:  1.1201 | Val Loss:  6.1955  <-- Generalization boundary
+  Step 1500 | Train Loss:  0.7519 | Val Loss:  6.5557
+  Step 1750 | Train Loss:  0.4840 | Val Loss:  6.4610
+  Step 2000 | Train Loss:  0.2984 | Val Loss:  6.6914
   Step 2500 | Train Loss:  0.1663 | Val Loss:  7.0479
+  Step 3000 | Train Loss:  0.1205 | Val Loss:  7.1991
+  Step 3500 | Train Loss:  0.1044 | Val Loss:  7.1613
   Step 4000 | Train Loss:  0.0835 | Val Loss:  7.7507
-  Step 4999 | Train Loss:  0.0757 | Val Loss:  7.9367  <-- Severe memorization (+2.33 val loss drift)
+  Step 4500 | Train Loss:  0.0759 | Val Loss:  7.7310
+  Step 4999 | Train Loss:  0.0757 | Val Loss:  7.9367
 
-Key Learning:
-A small dataset (~130k tokens) memorizes after ~20-25 epochs. For 500M, streaming 
-unique tokens or monitoring validation loss to checkpoint at the inflection point is required.
+Summary Statistics:
+  - Initial Loss:          10.5574 (Train) / 10.5697 (Val)
+  - Step 750 (Saved Model):2.5365 (Train)  / 5.6054 (Val)
+  - Step 4999 (Overfit):   0.0757 (Train)  / 7.9367 (Val)
+  - Memorization Divergence: +2.3313 Validation Loss degradation past Step 750
+  - Saved Checkpoint:      tiny_gpt_qa_v2.pt (State restored from Step 750 best weights)
+
+--------------------------------------------------------------------------------
+EMPIRICAL INFERENCE & INSTRUCTION PROBE AUDIT (TINYGPT-15.3M)
+--------------------------------------------------------------------------------
+Checkpoint Evaluated: tiny_gpt_qa_v2.pt (Restored Best Validation State @ Step 750)
+Sampling Settings:    temperature = 0.7, top_k = 40, stop on EOS (50256)
+
+[Instruction Test 1: Python Domain Definition]
+  - Prompt:        "Question: What is Python?\nAnswer:"
+  - Output:        "Python is a high-level, dynamically-typed programming language renowned for
+                    clear, readable syntax."
+  - Stop Reason:   EOS Token Generated (Clean termination)
+  - Evaluation:    10/10 Perfect precision. Shows that QA-pair oversampling successfully created
+                    definitional recall in domains covered by the instruction set.
+
+[Instruction Test 2: Character Identity]
+  - Prompt:        "Question: Who is Erasmus Thorne?\nAnswer:"
+  - Output:        "Erasmus Thorne is an elderly cartographer who devoted his lamp, while 'else'
+                    and sums them, and zeros everywhere else, acting as the story, always moving
+                    and never exceeds one."
+  - Stop Reason:   EOS Token Generated
+  - Evaluation:    6/10 Mixed. Captured the opening character premise ("elderly cartographer"),
+                    then cross-pollinated with technical code tokens present in the hybrid training blend.
+
+[Instruction Test 3: Supporting Character Role]
+  - Prompt:        "Question: Who is Constable Whitmore?\nAnswer:"
+  - Output:        "Constable Whitmore was a village archives."
+  - Stop Reason:   EOS Token Generated
+  - Evaluation:    5/10 Grammatical association error ("was a village archives" instead of "constable
+                    visiting the archives").
+
+[Instruction Test 4: Village Name Recall]
+  - Prompt:        "Question: What is the name of the village?\nAnswer:"
+  - Output:        "The outer Solar System, enabling them into low-level source code into sub-typed
+                    programming."
+  - Stop Reason:   EOS Token Generated
+  - Evaluation:    0/10 Severe Hallucination. General science tokens overwhelmed the 1,000-token
+                    story target due to small total parameter allocation for world facts.
+
+[Instruction Test 5: Algorithmic Knowledge]
+  - Prompt:        "Question: What is an algorithm?\nAnswer:"
+  - Output:        "The derivative of a function with respect to x is n * g'(x) = 1/2 = ma)."
+  - Stop Reason:   EOS Token Generated
+  - Evaluation:    0/10 Domain cross-talk. Replaced discrete algorithm definition with differential
+                    calculus tokens from technical general text blocks.
+
+--------------------------------------------------------------------------------
+CROSS-MODEL EVOLUTION & CONVERGENCE SUMMARY
+--------------------------------------------------------------------------------
+Model            Params      Hardware        Data Volume   Train Loss  Val Loss  PPL      Throughput
+----------------------------------------------------------------------------------------------------
+TinyGPT-0.12M    0.12M       Intel i7 CPU    1,072 tok     0.18        9.40      12,088   N/A
+TinyGPT-6.84M    6.84M       Intel i7 CPU    1,072 tok     0.025       7.51*     1,826    ~850 tok/s
+TinyGPT-11.1M    11.10M      Intel i7 (Spec) 40,000 tok    --          --        --       ~320 tok/s
+TinyGPT-15.3M    15.30M      Tesla T4 GPU    143,137 tok   2.53*       5.60*     271.8    23,140 tok/s
+TinyGPT-500M     500.14M     2x Tesla T4     131,072,000   2.96        2.90*     18.3     5,600 tok/s
+
+*Represents best validation checkpoint prior to overfitting divergence.
+
+Key Scientific Takeaways:
+1. The Parameter-to-Token Ratio Trap:
+   In TinyGPT-6.84M and 15.3M, the ratio was inverted (6.8M params on 1k tokens = 0.00015 tokens/param;
+   15.3M params on 143k tokens = 0.0093 tokens/param). In comparison, modern pretraining targets
+   >= 20 tokens per parameter. The 500M model training resolved this by processing 131M tokens.
+2. Embedding Weight Dominance:
+   At 6.84M and 15.3M, embedding matrices accounted for 94.09% and 84.08% of all parameters.
+   Only at the 500M scale did attention and MLP compute capacity expand to consume 79.4% of weights.
+3. The Role of Checkpoint Restoration:
+   Automatic checkpoint restoration at the validation loss inflection point (Step 750 on the 15.3M model)
+   prevented saving catastrophic overfit states, providing an essential template for the 500M pipeline.
 
 
 ================================================================================
