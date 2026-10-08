@@ -1,0 +1,200 @@
+================================================================================
+                    TINYGPT-15.3M EXPERIMENT & TELEMETRY LOG
+================================================================================
+Project:       TinyGPT Experimental Evolution (Scaling-Up Milestone)
+Repository:    mohamedusaid/TinyGPT
+Branch:        scaling-up
+Author:        Mohamed Usaid
+Audit Date:    October 2026
+
+================================================================================
+1. COMPREHENSIVE ARCHITECTURAL COMPARISON MATRIX
+================================================================================
+
+Parameter / Feature           TinyGPT-0.12M (Toy)   TinyGPT-6.84M (Local)  TinyGPT-11.1M (Scaling) TinyGPT-15.3M (T4 GPU)
+-------------------------------------------------------------------------------------------------------------------------
+Vocabulary Size (V)           568 (Story Local)     50,257 (GPT-2 BPE)     50,257 (GPT-2 BPE)      50,257 (GPT-2 BPE)
+Context Length (T)            8 tokens              64 tokens              128 tokens              256 tokens
+Hidden Dimension (d_model)    64                    128                    192                     256
+Transformer Layers (L)        1 layer               2 layers               3 layers                3 layers
+Attention Heads (H)           4 heads               4 heads                6 heads                 8 heads
+Head Dimension (d_head)       16 (64/4)             32 (128/4)             32 (192/6)              32 (256/8)
+FFN Intermediate Dim (d_ff)   256 (4x)              512 (4x)               768 (4x)                1,024 (4x)
+Activation Function           GELU                  GELU                   GELU                    GELU
+Positional Encoding           Learned Absolute      Learned Absolute       Learned Absolute        Learned Absolute
+Normalization                 Post-LN / Pre-LN      Pre-LN LayerNorm       Pre-LN LayerNorm        Pre-LN LayerNorm
+LM Head Weight Tying          Untied                Tied (Shared)          Tied (Shared)           Tied (Shared)
+Attention Implementation      Manual Einsum / Dot   Merged Linear QKV      Merged Linear QKV       Merged Linear QKV
+Hardware Target               Intel Core i7 (CPU)   Intel Core i7 (CPU)    Intel Core i7 (CPU)     NVIDIA Tesla T4 (GPU)
+Total Trainable Parameters    122,944               6,837,120              11,104,896              15,301,120
+
+--------------------------------------------------------------------------------
+EXACT PARAMETER DECOMPOSITION TABLES
+--------------------------------------------------------------------------------
+
+A. TinyGPT-11.1M Intermediate Scaling Spec (Actual Count: 11,104,896)
+  1. Token Embedding (V=50257, d=192):          9,649,344  (86.89%)
+  2. Position Embedding (T=128, d=192):            24,576   (0.22%)
+  3. Transformer Layers (3 Layers):             1,430,592  (12.88%)
+       Per Layer Breakdown (476,864 params):
+       - LayerNorm 1:                                 384
+       - Attention QKV Proj (192 -> 576, no bias):110,592
+       - Attention Out Proj (192 -> 192, with bias):37,056
+       - LayerNorm 2:                                 384
+       - FFN Linear 1 (192 -> 768, with bias):    148,224
+       - FFN Linear 2 (768 -> 192, with bias):    147,648
+  4. Final LayerNorm:                                 384   (0.00%)
+  5. LM Head (Tied to Token Embedding):                 0   (0.00%)
+  ----------------------------------------------------------------
+  Total Parameters:                            11,104,896 (100.00%)
+
+B. TinyGPT-15.3M Cloud T4 Production Model (Actual Count: 15,301,120)
+  1. Token Embedding (V=50257, d=256):         12,865,792  (84.08%)
+  2. Position Embedding (T=256, d=256):            65,536   (0.43%)
+  3. Transformer Layers (3 Layers):             2,369,280  (15.48%)
+       Per Layer Breakdown (789,760 params):
+       - LayerNorm 1:                                 512
+       - Attention QKV Proj (256 -> 768, no bias):196,608
+       - Attention Out Proj (256 -> 256, with bias):65,792
+       - LayerNorm 2:                                 512
+       - FFN Linear 1 (256 -> 1024, with bias):   263,168
+       - FFN Linear 2 (1024 -> 256, with bias):   262,656
+  4. Final LayerNorm:                                 512   (0.00%)
+  5. LM Head (Tied to Token Embedding):                 0   (0.00%)
+  ----------------------------------------------------------------
+  Total Parameters:                            15,301,120 (100.00%)
+
+
+================================================================================
+2. TINYGPT-15.3M CLOUD GPU PRETRAINING RUN (TESLA T4 TELEMETRY)
+================================================================================
+Hardware Environment:
+  - Platform:              Cloud GPU Environment
+  - Accelerator:           NVIDIA Tesla T4 (15.0 GiB VRAM capacity, Turing Architecture)
+  - CUDA Version:          12.8
+  - Precision:             FP32 / PyTorch Native Cuda
+
+Model Configuration:
+  - Parameters:            15,301,120
+  - Sequence Context:      256 tokens
+  - Hidden Size:           256
+  - Attention Heads:       8 heads (d_head = 32)
+  - Layers:                3 Transformer Blocks
+  - Batch Geometry:        Batch Size = 16, Context = 256 -> 4,096 tokens / step
+
+Dataset Geometry (TinyGPT v2 Hybrid Corpus):
+  - General Text:          62,093 words across 660 blocks
+  - Q&A Instruction Pairs: 596 examples (16,132 words)
+  - QA Re-sampling Weight: 3x oversampled
+  - Training Set:          130,798 tokens
+  - Validation Set:        12,339 tokens
+  - Total Corpus:          143,137 tokens
+
+Empirical Progression Telemetry (5,000 Steps, 14.03 Minutes):
+  Step Benchmark: 17.7 seconds / 100 steps (~23,140 tokens / sec throughput)
+
+  Step    0 | Train Loss: 10.5574 | Val Loss: 10.5697
+  Step  250 | Train Loss:  4.7624 | Val Loss:  5.8446
+  Step  500 | Train Loss:  3.5097 | Val Loss:  5.6621
+  Step  750 | Train Loss:  2.5365 | Val Loss:  5.6054  <-- OPTIMAL VALIDATION RECORD (Step 750)
+  Step 1000 | Train Loss:  1.7372 | Val Loss:  5.6134
+  Step 1250 | Train Loss:  1.1201 | Val Loss:  6.1955  <-- Generalization boundary
+  Step 1500 | Train Loss:  0.7519 | Val Loss:  6.5557
+  Step 1750 | Train Loss:  0.4840 | Val Loss:  6.4610
+  Step 2000 | Train Loss:  0.2984 | Val Loss:  6.6914
+  Step 2500 | Train Loss:  0.1663 | Val Loss:  7.0479
+  Step 3000 | Train Loss:  0.1205 | Val Loss:  7.1991
+  Step 3500 | Train Loss:  0.1044 | Val Loss:  7.1613
+  Step 4000 | Train Loss:  0.0835 | Val Loss:  7.7507
+  Step 4500 | Train Loss:  0.0759 | Val Loss:  7.7310
+  Step 4999 | Train Loss:  0.0757 | Val Loss:  7.9367
+
+Summary Statistics:
+  - Initial Loss:            10.5574 (Train) / 10.5697 (Val)
+  - Step 750 (Saved Model):  2.5365 (Train)  / 5.6054 (Val)
+  - Step 4999 (Overfit):     0.0757 (Train)  / 7.9367 (Val)
+  - Memorization Divergence: +2.3313 Validation Loss degradation past Step 750
+  - Saved Checkpoint:        tiny_gpt_qa_v2.pt (State restored from Step 750 best weights)
+
+
+================================================================================
+3. EMPIRICAL INFERENCE & INSTRUCTION PROBE AUDIT (TINYGPT-15.3M)
+================================================================================
+Checkpoint Evaluated: tiny_gpt_qa_v2.pt (Restored Best Validation State @ Step 750)
+Sampling Settings:    temperature = 0.7, top_k = 40, stop on EOS (50256)
+
+[Instruction Test 1: Python Domain Definition]
+  - Prompt:        "Question: What is Python?\nAnswer:"
+  - Output:        "Python is a high-level, dynamically-typed programming language renowned for clear, readable syntax."
+  - Stop Reason:   EOS Token Generated (Clean termination)
+  - Evaluation:    10/10 Perfect precision. Shows that QA-pair oversampling successfully created definitional recall in domains covered by the instruction set.
+
+[Instruction Test 2: Character Identity]
+  - Prompt:        "Question: Who is Erasmus Thorne?\nAnswer:"
+  - Output:        "Erasmus Thorne is an elderly cartographer who devoted his lamp, while 'else' and sums them, and zeros everywhere else, acting as the story, always moving and never exceeds one."
+  - Stop Reason:   EOS Token Generated
+  - Evaluation:    6/10 Mixed. Captured the opening character premise ("elderly cartographer"), then cross-pollinated with technical code tokens present in the hybrid training blend.
+
+[Instruction Test 3: Supporting Character Role]
+  - Prompt:        "Question: Who is Constable Whitmore?\nAnswer:"
+  - Output:        "Constable Whitmore was a village archives."
+  - Stop Reason:   EOS Token Generated
+  - Evaluation:    5/10 Grammatical association error ("was a village archives" instead of "constable visiting the archives").
+
+[Instruction Test 4: Village Name Recall]
+  - Prompt:        "Question: What is the name of the village?\nAnswer:"
+  - Output:        "The outer Solar System, enabling them into low-level source code into sub-typed programming."
+  - Stop Reason:   EOS Token Generated
+  - Evaluation:    0/10 Severe Hallucination. General science tokens overwhelmed the 1,000-token story target due to small total parameter allocation for world facts.
+
+[Instruction Test 5: Algorithmic Knowledge]
+  - Prompt:        "Question: What is an algorithm?\nAnswer:"
+  - Output:        "The derivative of a function with respect to x is n * g'(x) = 1/2 = ma)."
+  - Stop Reason:   EOS Token Generated
+  - Evaluation:    0/10 Domain cross-talk. Replaced discrete algorithm definition with differential calculus tokens from technical general text blocks.
+
+
+================================================================================
+4. CROSS-MODEL EVOLUTION & CONVERGENCE BENCHMARK
+================================================================================
+Model            Params      Hardware        Data Volume   Train Loss  Val Loss  PPL      Throughput
+----------------------------------------------------------------------------------------------------
+TinyGPT-0.12M    0.12M       Intel i7 CPU    1,072 tok     0.18        9.40      12,088   N/A
+TinyGPT-6.84M    6.84M       Intel i7 CPU    1,072 tok     0.025       7.51*     1,826    ~850 tok/s
+TinyGPT-11.1M    11.10M      Intel i7 (Spec) 40,000 tok    --          --        --       ~320 tok/s
+TinyGPT-15.3M    15.30M      Tesla T4 GPU    143,137 tok   2.53*       5.60*     271.8    23,140 tok/s
+Usaid AI (500M)  500.14M     2x Tesla T4     131,072,000   2.96        2.90*     18.3     5,600 tok/s
+
+*Represents best validation checkpoint prior to overfitting divergence.
+
+
+================================================================================
+5. KEY SCIENTIFIC TAKEAWAYS & PATHWAY TO 500M
+================================================================================
+1. The Parameter-to-Token Ratio Trap:
+   In TinyGPT-6.84M and 15.3M, the parameter-to-token ratio was inverted:
+   - 6.84M params on 1,072 tokens = 0.00015 tokens / param
+   - 15.3M params on 143k tokens = 0.0093 tokens / param
+   Chinchilla scaling laws require >= 20 tokens per parameter to prevent premature memorization.
+   At 15.3M, the model achieved minimum validation loss at Step 750 (~23.5 epochs), after which
+   it rapidly memorized the training text (+2.33 val loss drift).
+
+2. Embedding Weight Dominance:
+   In TinyGPT-15.3M, the token embedding matrix (50,257 x 256) consumes 84.08% of all parameters.
+   Only 15.92% remained for actual transformer computation (self-attention and feed-forward networks).
+   Scaling to 500M reversed this bottleneck: embeddings account for only 10.3%, leaving 79.4%
+   for reasoning depth (30 layers, 1024 dim).
+
+3. Positional Encoding Bottleneck:
+   Absolute learned positional embeddings capped sequence length at 256 tokens and could not
+   generalize to longer contexts. The 500M model transitioned to Rotary Position Embedding (RoPE),
+   enabling dynamic context extension with 0 parameter overhead.
+
+4. Attention Efficiency (MHA vs GQA):
+   Standard Multi-Head Attention (MHA) in 15.3M required distinct key/value heads for every query head.
+   The 500M model introduced Grouped-Query Attention (GQA, 16 Query heads / 4 Key-Value heads),
+   reducing KV cache size by 75% for memory-efficient autoregressive inference.
+
+5. Modern Nonlinearities:
+   Replacing LayerNorm with RMSNorm and standard GELU FFN with SwiGLU gating provided smoother gradient
+   flow and enhanced representation capacity in the 500M frontier architecture.
