@@ -7,12 +7,13 @@
 
 [![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-UsaidAI--500M-blue.svg)](https://huggingface.co/Usaidddddddddddddd/UsaidAI-500M)
 [![Hugging Face Space](https://img.shields.io/badge/%F0%9F%A4%97%20Space-Interactive%20Chat-orange.svg)](https://huggingface.co/spaces/Usaidddddddddddddd/UsaidAI-500M-Chat)
+[![GGUF Quants](https://img.shields.io/badge/%F0%9F%A7%A9%20GGUF%20Quants-mradermacher-green.svg)](https://huggingface.co/mradermacher/UsaidAI-500M-GGUF)
 [![GitHub License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Parameters](https://img.shields.io/badge/Parameters-500.14M-blueviolet.svg)](#1-architectural-specification)
 [![Hardware](https://img.shields.io/badge/Pretrained%20On-Dual%20Cloud%20GPUs%20(2x%20Tesla%20T4)-yellow.svg)](#3-empirical-training--convergence-results)
 
-[**Live Interactive Chat Demo**](https://huggingface.co/spaces/Usaidddddddddddddd/UsaidAI-500M-Chat) • [**Hugging Face Model Weights**](https://huggingface.co/Usaidddddddddddddd/UsaidAI-500M) • [**Architecture Specs**](#1-architectural-specification) • [**CLI & Usage Guide**](#4-comprehensive-usage-guide)
+[**Live Interactive Chat Demo**](https://huggingface.co/spaces/Usaidddddddddddddd/UsaidAI-500M-Chat) • [**Hugging Face Model Weights**](https://huggingface.co/Usaidddddddddddddd/UsaidAI-500M) • [**GGUF Quants**](https://huggingface.co/mradermacher/UsaidAI-500M-GGUF) • [**Architecture Specs**](#1-architectural-specification) • [**CLI & Usage Guide**](#4-comprehensive-usage-guide)
 
 </div>
 
@@ -274,7 +275,35 @@ print(response.strip())
 
 ---
 
-### Mode 7: Training & Export Pipeline
+### Mode 7: Local Inference with `llama.cpp` & Ollama (Community GGUF Quants)
+
+Thanks to open-source community member [**mradermacher**](https://huggingface.co/mradermacher), pre-quantized static GGUF weights are available at [**`mradermacher/UsaidAI-500M-GGUF`**](https://huggingface.co/mradermacher/UsaidAI-500M-GGUF).
+
+This allows you to run Usaid AI (500M) locally on CPUs, Apple Silicon Macs, or edge hardware with ultra-low memory requirements (~300MB – 600MB RAM) without installing PyTorch or Python:
+
+#### 1. Instant Terminal CLI via `llama.cpp`:
+```bash
+# Direct terminal prompt generation (Q4_K_M recommended)
+llama cli -hf mradermacher/UsaidAI-500M-GGUF:Q4_K_M -p "User: What is artificial intelligence?\n\nAssistant:"
+```
+
+#### 2. Local OpenAI-Compatible Server & Web UI:
+```bash
+# Starts a local server at http://localhost:8080 with built-in chat UI
+llama serve -hf mradermacher/UsaidAI-500M-GGUF:Q4_K_M --port 8080
+```
+
+#### Available Quantizations:
+| Quantization Type | File Size | Recommended Use Case |
+| :--- | :--- | :--- |
+| **`Q4_K_M`** | ~0.4 GB | **Recommended** — Fast, optimal speed & quality balance |
+| **`Q5_K_M`** | ~0.5 GB | Higher precision with minimal memory overhead |
+| **`Q8_0`** | ~0.6 GB | Near-lossless 8-bit precision |
+| **`Q2_K`** | ~0.3 GB | Ultra-compact footprint for resource-constrained edge devices |
+
+---
+
+### Mode 8: Training & Export Pipeline
 
 #### 1. Hardware Verification
 ```bash
