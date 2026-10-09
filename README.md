@@ -93,6 +93,12 @@ TOTAL ACTUAL PARAMETERS:                  500,136,960 (100.00%)
 
 ## 3. Empirical Training & Convergence Results
 
+<div align="center">
+
+![Usaid AI (500M) Empirical Telemetry Audit](training_telemetry.png)
+
+</div>
+
 ### Pretraining Phase (Foundational Base Model)
 - **Hardware**: Dual Cloud GPUs (2 x 16 GB NVIDIA Tesla T4, 32 GB GDDR6 total)
 - **Distributed Strategy**: PyTorch DistributedDataParallel (DDP, `torchrun`, `world_size=2`)
