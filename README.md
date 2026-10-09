@@ -8,6 +8,7 @@
 [![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-UsaidAI--500M-blue.svg)](https://huggingface.co/Usaidddddddddddddd/UsaidAI-500M)
 [![Hugging Face Space](https://img.shields.io/badge/%F0%9F%A4%97%20Space-Interactive%20Chat-orange.svg)](https://huggingface.co/spaces/Usaidddddddddddddd/UsaidAI-500M-Chat)
 [![GGUF Quants](https://img.shields.io/badge/%F0%9F%A7%A9%20GGUF%20Quants-mradermacher-green.svg)](https://huggingface.co/mradermacher/UsaidAI-500M-GGUF)
+[![Trackio](https://img.shields.io/badge/📊_Trackio-Telemetry_Logs-blue.svg)](https://github.com/gradio-app/trackio)
 [![GitHub License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Parameters](https://img.shields.io/badge/Parameters-500.14M-blueviolet.svg)](#1-architectural-specification)
@@ -118,6 +119,17 @@ TOTAL ACTUAL PARAMETERS:                  500,136,960 (100.00%)
   - **Step 384**: **Best SFT Loss `1.3938`** (**>52% drop from baseline**)
   - Final Step (Step 441): SFT loss `1.4715`
 - **Artifact**: `sft_checkpoints/usaid_ai_500m.pt`
+
+### Interactive Telemetry via Trackio (`gradio-app/trackio`)
+All 2,000 steps of pretraining and 441 steps of SFT alignment are indexed for [**Trackio**](https://github.com/gradio-app/trackio) (the open-source, local-first experiment tracker by Hugging Face & Gradio). You can explore interactive charts for cross-entropy loss, gradient norms, learning rate decay, and throughput locally:
+
+```bash
+# Sync logs and launch interactive browser dashboard:
+python scripts/view_trackio.py
+
+# Or launch directly with the Trackio CLI:
+trackio show --project "UsaidAI-500M"
+```
 
 ### Zero-Shot Multi-Domain Diagnostic Benchmark
 Evaluated using length-normalized completion log-likelihood over 4 candidate choices:
@@ -303,7 +315,26 @@ llama serve -hf mradermacher/UsaidAI-500M-GGUF:Q4_K_M --port 8080
 
 ---
 
-### Mode 8: Training & Export Pipeline
+### Mode 8: Interactive Telemetry Dashboard (`trackio`)
+
+Visualize the full pretraining (2,000 steps) and SFT alignment (441 steps) curves, gradient dynamics, and GPU throughput using [**Trackio**](https://github.com/gradio-app/trackio):
+
+```bash
+# Parse logs and launch the local interactive Gradio dashboard:
+python scripts/view_trackio.py
+
+# Launch directly via Trackio CLI:
+trackio show --project "UsaidAI-500M"
+
+# Generate a shareable public Gradio link (valid for 72 hours):
+python scripts/view_trackio.py --share
+```
+
+*Files involved: `scripts/view_trackio.py`, `training_logs.txt`.*
+
+---
+
+### Mode 9: Training & Export Pipeline
 
 #### 1. Hardware Verification
 ```bash
