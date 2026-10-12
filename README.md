@@ -126,6 +126,19 @@ TOTAL ACTUAL PARAMETERS:                  500,136,960 (100.00%)
   - Final Step (Step 441): SFT loss `1.4715`
 - **Artifact**: `sft_checkpoints/usaid_ai_500m.pt`
 
+#### Exact SFT Dataset Audit & Source Matrix
+
+Generated via [`scripts/download_sft_data.py`](file:///d:/python_project/tiny-gpt-500m/scripts/download_sft_data.py) by interleaving two Hugging Face SmolTalk subsets with curated identity and coding pairs:
+
+| Dataset / Source | Site / URL | Exact Split | Exact Row Range | HF Viewer Page Range | Samples Taken |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **SmolTalk: Everyday Conversations** | [Hugging Face SmolTalk](https://huggingface.co/datasets/HuggingFaceTB/smoltalk/viewer/everyday-conversations/train) | `train` | Row 1 to Row 2,260 (100% of entire split) | Page 1 to Page 23 | 2,260 |
+| **SmolTalk: OpenHermes-100k** | [Hugging Face OpenHermes-100k](https://huggingface.co/datasets/HuggingFaceTB/smoltalk/viewer/openhermes-100k/train) | `train` | Row 1 to Row 2,260 (out of 95,000) | Page 1 to Page 23 | 2,260 |
+| **Curated Identity & Creator Persona** | Local in [`scripts/download_sft_data.py`](file:///d:/python_project/tiny-gpt-500m/scripts/download_sft_data.py) | Custom | 34 distinct questions (4x repeats) | N/A | 136 |
+| **Curated Multi-Language Code** | Local in [`scripts/download_sft_data.py`](file:///d:/python_project/tiny-gpt-500m/scripts/download_sft_data.py) | Custom | 5 distinct questions (15x repeats) | N/A | 75 |
+| **TOTAL SFT TRAINING SET** | — | — | — | — | **4,731** |
+
+
 ### Interactive Telemetry via Trackio (`gradio-app/trackio`)
 All 2,000 steps of pretraining and 441 steps of SFT alignment are indexed for [**Trackio**](https://github.com/gradio-app/trackio) (the open-source, local-first experiment tracker by Hugging Face & Gradio). You can explore interactive charts for cross-entropy loss, gradient norms, learning rate decay, and throughput locally:
 

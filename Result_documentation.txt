@@ -1166,6 +1166,18 @@ Hardware & Execution Environment:
   - Optimizer:                CUDA Fused AdamW, Linear Warmup (step 1-22), Cosine Annealing to min_lr 2.0e-06
   - Total Tokens Backpropped: ~28.9 Million tokens of high-quality conversational instructions
 
+Exact SFT Dataset Audit & Source Matrix:
+---------------------------------------------------------------------------------------------------------------------------------------------
+Dataset / Source                     Site / URL                                         Split  Exact Row Range                  HF Pages   Pairs
+---------------------------------------------------------------------------------------------------------------------------------------------
+SmolTalk: Everyday Conversations     huggingface.co/datasets/HuggingFaceTB/smoltalk     train  Row 1 to Row 2,260 (100% split)  Pages 1-23 2,260
+SmolTalk: OpenHermes-100k            huggingface.co/datasets/HuggingFaceTB/smoltalk     train  Row 1 to Row 2,260 (out of 95k)  Pages 1-23 2,260
+Curated Identity & Creator Persona   Local in scripts/download_sft_data.py              Custom 34 distinct questions (4x repeats) N/A        136
+Curated Multi-Language Code          Local in scripts/download_sft_data.py              Custom 5 distinct questions (15x repeats) N/A         75
+---------------------------------------------------------------------------------------------------------------------------------------------
+TOTAL SFT TRAINING SET                                                                                                              4,731
+---------------------------------------------------------------------------------------------------------------------------------------------
+
 Empirical SFT Loss Convergence Progression:
   - Step 1 (Initialization):  SFT Loss: 2.9302 | Grad Norm: 3.96 | LR: 9.09e-07 (Inherited from 2.9091 Val Loss)
   - Step 10:                  SFT Loss: 2.6982 | Grad Norm: 2.93 | LR: 9.09e-06
