@@ -13,10 +13,15 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Parameters](https://img.shields.io/badge/Parameters-500.14M-blueviolet.svg)](#1-architectural-specification)
 [![Hardware](https://img.shields.io/badge/Pretrained%20On-Dual%20Cloud%20GPUs%20(2x%20Tesla%20T4)-yellow.svg)](#3-empirical-training--convergence-results)
+[![GitHub stars](https://img.shields.io/github/stars/mohamedusaid/TinyGPT?style=social)](https://github.com/mohamedusaid/TinyGPT/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/mohamedusaid/TinyGPT?style=social)](https://github.com/mohamedusaid/TinyGPT/network/members)
+[![GitHub watchers](https://img.shields.io/github/watchers/mohamedusaid/TinyGPT?style=social)](https://github.com/mohamedusaid/TinyGPT/watchers)
 
 [**Live Interactive Chat Demo**](https://huggingface.co/spaces/Usaidddddddddddddd/UsaidAI-500M-Chat) • [**Hugging Face Model Weights**](https://huggingface.co/Usaidddddddddddddd/UsaidAI-500M) • [**GGUF Quants**](https://huggingface.co/mradermacher/UsaidAI-500M-GGUF) • [**Architecture Specs**](#1-architectural-specification) • [**CLI & Usage Guide**](#4-comprehensive-usage-guide)
 
 </div>
+
+> ⭐ **Support the Project:** If you find this architecture implementation or the 500M training checkpoints useful, please consider **starring** the repository! It helps more developers and researchers discover the project.
 
 ---
 
