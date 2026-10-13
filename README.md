@@ -10,8 +10,13 @@
 [![Parameters](https://img.shields.io/badge/Parameters-6.84M-green.svg)](#1-architectural-specifications)
 [![Hardware](https://img.shields.io/badge/Hardware-Intel%20Core%20i7%20(CPU)-orange.svg)]()
 [![Branch](https://img.shields.io/badge/Branch-main-purple.svg)]()
+[![GitHub stars](https://img.shields.io/github/stars/mohamedusaid/TinyGPT?style=social)](https://github.com/mohamedusaid/TinyGPT/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/mohamedusaid/TinyGPT?style=social)](https://github.com/mohamedusaid/TinyGPT/network/members)
+[![GitHub watchers](https://img.shields.io/github/watchers/mohamedusaid/TinyGPT?style=social)](https://github.com/mohamedusaid/TinyGPT/watchers)
 
 </div>
+
+> ⭐ **Support the Project:** If you find this architecture implementation or the 500M training checkpoints useful, please consider **starring** the repository! It helps more developers and researchers discover the project.
 
 ---
 
